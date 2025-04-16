@@ -9,84 +9,57 @@ addpath('C:\Users\smellor\Documents\GitHub\BrewerMap')
 colormap123 = colormap(flipud(brewermap(64,'RdBu')));
 addpath('C:\Users\smellor\Documents\GitHub\icp');
 
-cd('E:\Data\Neuro1\Auditory');
+addpath('C:\Users\smellor\Documents\GitHub\my_repos\walking_opmeg_erf\helper_functions')
+
+addpath('C:\Users\smellor\Documents\GitHub\linspecer');
 
 %% Format meta data to do analysis
 
-subIDs = {'sub-003'};
+cd('E:\Data\Neuro1\Auditory\anonymised_for_sharing');
 
-meta_data = table('Size', [0,9], 'VariableTypes', {'string', 'string', 'string', 'string', 'string', 'string', 'string', 'string', 'string'},...
-    'VariableNames', {'sub', 'date', 'raw_data_name', 'raw_data_loc', 'analysed_data_loc', 'results_save_loc', 'stim_data_fname', 'OptiTrig', 'AudioTrig'});
+subIDs = {'sub-001', 'sub-002', 'sub-003'};
+
+meta_data = table('Size', [0,7], 'VariableTypes', {'string', 'string', 'string', 'string', 'string', 'string', 'string'},...
+    'VariableNames', {'sub', 'raw_data_name', 'raw_data_loc', 'analysed_data_loc', 'results_save_loc', 'OptiTrig', 'AudioTrig'});
 
 % Format meta data table
 for sub = 1:length(subIDs)
 
     % Set audio and optitrack trigger names
-    if strcmp(subIDs{sub}, 'sub-003')
+    if strcmp(subIDs{sub}, 'sub-001')
         optitrig = 'AI8';
         audiotrig = 'AI16';
-    elseif strcmp(subIDs{sub}, 'sub-004')
+    elseif strcmp(subIDs{sub}, 'sub-003')
         optitrig = 'AI16';
         audiotrig = 'AI8';
+    elseif strcmp(subIDs{sub}, 'sub-002')
+        optitrig = 'T3';
+        audiotrig = 'A16';
     else
         error('Please set trigger channel names for participant %s', subIDs{sub})
     end
 
     % Search folders for files
-    fpathRoot2 = fullfile(cd, subIDs{sub});
+    fpathRoot2 = fullfile(cd, 'rawData');
 
-    % Find scan date
-    listing = dir(fpathRoot2);
+    % Find data files
+    fpathRoot3 = fullfile(fpathRoot2, subIDs{sub}, 'meg');
+
+    % Find raw data name
+    listing = dir(fpathRoot3);
     listing = extractfield(listing, 'name');
-    folders = {};
-    for ll = 1:length(listing)
-        if regexp(listing{ll}, '^[0-9]{8}$')
-            folders = cat(1, folders, listing{ll});
-        end
-    end
 
-    % Loop through scan dates
-    for ll = 1:length(folders)
-        fpathRoot3 = fullfile(fpathRoot2, folders{ll}, 'opm', 'rawData');
-
-        % Find raw data name
-        listing = dir(fpathRoot3);
-        listing = extractfield(listing, 'name');
-
-        % Just choose lvm files
-        lvmfiles = listing(endsWith(listing, '.lvm'));
+    % Just choose lvm files
+    lvmfiles = listing(endsWith(listing, '.lvm'));
             
-        for bb = 1:length(lvmfiles)
-
-            % Only add to table if a positions file exists and name doesn't contain noise
-            if isfile(fullfile(fpathRoot3, strrep(lvmfiles{bb}, '.lvm', '_positions.tsv'))) && ~contains(lvmfiles{bb}, 'noise')
-
-                % Find corresponding stim data file
-                fpath_stim = fullfile(fpathRoot2, folders{ll}, 'stim');
-                listing = dir(fpath_stim);
-                listing = extractfield(listing, 'name');
-                open = contains(lvmfiles{bb}, 'open');
-                seated = contains(lvmfiles{bb}, 'seated');
-                if open
-                    open_or_closed = 'open';
-                else
-                    open_or_closed = 'closed';
-                end
-                if seated
-                    seated_or_walking = 'seated';
-                else
-                    seated_or_walking = 'walking';
-                end
-                stimfile = listing(contains(listing, open_or_closed) & contains(listing, seated_or_walking));
-                
-                % Fill in table
-                meta_data = [meta_data; {subIDs{sub}, folders{ll}, lvmfiles{bb}, ...
-                    fpathRoot3, fullfile(fpathRoot2, folders{ll}, 'opm', 'analysedData'), ...
-                    fullfile(fpathRoot2, folders{ll}, 'opm', 'results'), fullfile(fpath_stim, stimfile{1}), optitrig, audiotrig}];
-            end
-        end
+    for bb = 1:length(lvmfiles)
+        % Fill in table
+        meta_data = [meta_data; {subIDs{sub}, lvmfiles{bb}, fpathRoot3, ...
+            fullfile(cd, 'analysedData', subIDs{sub}), ...
+            fullfile(cd, 'results', subIDs{sub}), optitrig, audiotrig}];
     end
 end
+
 
 clearvars -except meta_data colormap123
 
@@ -95,23 +68,36 @@ clearvars -except meta_data colormap123
 
 for recording = 1:size(meta_data,1)
 
+    if strcmp(meta_data{recording, "sub"}, 'sub-002')
+        rad_ax = 'Z';
+    else
+        rad_ax = 'Y';
+    end
+
     rawDataPath = char(meta_data{recording, "raw_data_loc"});
     analysedDataPath = char(meta_data{recording, "analysed_data_loc"});
     resultsPath = char(meta_data{recording, "results_save_loc"});
+
+    if ~exist(analysedDataPath, "dir")
+        mkdir(analysedDataPath);
+    end
+    if ~exist(resultsPath, "dir")
+        mkdir(resultsPath);
+    end
     
     cd(rawDataPath)
     
-    fname = char(extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+    fname = char(extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm'));
     
-    if isfile(fullfile(analysedDataPath, [fname, '.mat']))
-        D = spm_eeg_load(fullfile(analysedDataPath, [fname, '.mat']));
+    if isfile(fullfile(analysedDataPath, [fname, '_meg.mat']))
+        D = spm_eeg_load(fullfile(analysedDataPath, [fname, '_meg.mat']));
     else
         S = [];
         S.positions = sprintf('%s_positions.tsv', fname);
-        S.data = fullfile(cd, sprintf('%s.lvm', fname));
+        S.data = fullfile(cd, sprintf('%s_meg.lvm', fname));
         S.path = analysedDataPath;
-        S.sMRI = fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'sub-')),...
-            char(meta_data{recording, "sub"}), 'mri', sprintf('%s_structural_anon.nii', meta_data{recording, 'sub'}));
+        S.sMRI = fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
+            'anat', sprintf('%s.nii', meta_data{recording, 'sub'}));
         D = spm_opm_create(S);
     end
     
@@ -119,72 +105,26 @@ for recording = 1:size(meta_data,1)
 
     %% Preprocess data
 
-    % Badchannels
-    
-    if strcmp(meta_data{recording, "sub"}, 'sub-003')
-        D = badchannels(D, selectchannels(D, 'regexp_(^(27|8|31|59|6|5|19|41|24|30|17)-.*)'), 1);
-    elseif strcmp(meta_data{recording, "sub"}, 'sub-004')
-        D = badchannels(D, selectchannels(D, 'regexp_(^(2|19|28|14|31|59|1|4)-.*)'), 1);
-        D = badchannels(D, selectchannels(D, 'regexp_(^5-.*-Y$)'), 1);
-    else
-        warning('Badchannels not set for participant %s', meta_data{recording, "sub"});
-    end
-    save(D);
-
     % PSD
     S = [];
     S.D = D;
     S.channels = D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD'));
     S.plot = 1;
     S.triallength = 10e3;
-    %S.plotbad = 1;
     [po, freq] = spm_opm_psd(S);
 
-    % Plot spatially
-    if isfile(sprintf('%s_2Dlayout.mat', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm')))
-        load(sprintf('%s_2Dlayout.mat', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm')));
+    % Badchannels
+    if strcmp(meta_data{recording, "sub"}, 'sub-001')
+        D = badchannels(D, selectchannels(D, 'regexp_(^(27|8|31|59|6|5|19|41|24|30|17)-.*)'), 1);
+    elseif strcmp(meta_data{recording, "sub"}, 'sub-002')
+        D = badchannels(D, selectchannels(D, 'regexp_(^(28|48|41)-.*)'), 1);
+    elseif strcmp(meta_data{recording, "sub"}, 'sub-003')
+        D = badchannels(D, selectchannels(D, 'regexp_(^(2|19|28|14|31|59|1|4)-.*)'), 1);
+        D = badchannels(D, selectchannels(D, 'regexp_(^5-.*-Y$)'), 1);
     else
-        fid = fiducials(D);
-        fid_struct = struct('NAS', fid.fid.pnt(contains(fid.fid.label, 'nas'),:), ...
-            'LPA', fid.fid.pnt(contains(fid.fid.label, 'lpa'),:), ...
-            'RPA', fid.fid.pnt(contains(fid.fid.label, 'rpa'),:));
-        pos = D.sensors('MEG').coilpos;
-        lay = spm_get_anatomical_layout(D.sensors('MEG').coilpos(endsWith(D.sensors('MEG').label, '-Y'),:), ...
-            D.sensors('MEG').label(endsWith(D.sensors('MEG').label, '-Y')),...
-            double(gifti(D.inv{1}.mesh.tess_scalp).vertices), fid_struct, 0);
-        save(sprintf('%s_2Dlayout', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm')), 'lay');
+        warning('Badchannels not set for participant %s', meta_data{recording, "sub"});
     end
-
-    S = [];
-    S.trialength = 1000;
-    S.D = D;
-    D1 = spm_eeg_epochs(S);
-    
-    data = fttimelock(D1);
-    cfg = [];
-    cfg.channel = D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD'));
-    avdata = ft_timelockanalysis(cfg, data);
-    psd_avdata = avdata;
-    psd_avdata.avg = repmat(sum((po((freq > 2) & (freq < 10),:)*1e-15*1e9).^2, 1)', 1, length(psd_avdata.time));
-    
-    figure;
-    cfg = [];
-    cfg.layout    = lay;
-    cfg.colorbar  = 'EastOutside';
-    cfg.colorbartext = 'Power (nT^2)';
-    cfg.zlim      = [0 max(psd_avdata.avg(ismember(psd_avdata.label, lay.label),1))];
-    cfg.colormap  = colormap123(ceil(size(colormap123,1)/2):end,:);
-    cfg.xlim = [1, 1]*1e-3;
-    cfg.comment = 'no';
-    cfg.figure = gca;
-    set(gca, 'FontSize', 16);
-    ft_topoplotER(cfg, psd_avdata)
-    print(fullfile(meta_data{recording, "results_save_loc"}, ...
-        sprintf('%s_raw_2_to_10_Hz_power_spatial', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
-
-    delete(D1);
-    clear psd_avdata data D1 po freq
-
+    save(D);
     
     % Sync with optitrack
     if isfile(['opti_data_', D.fname])
@@ -193,7 +133,7 @@ for recording = 1:size(meta_data,1)
     else
         cfg = [];
         fname = D.fname;
-        cfg.filename = [rawDataPath, '\', fname(1:end-4), '_optitrack.csv'];
+        cfg.filename = [rawDataPath, '\', extractBefore(fname, '_meg.'), '_optitrack.csv'];
         opti_data = readRigidBody(cfg);
         [opti_data, D] = syncOptitrackAndOPMdata(opti_data,D,'TriggerChannelName',meta_data{recording, "OptiTrig"});
         save(['opti_data_', D.fname], 'opti_data');
@@ -203,7 +143,9 @@ for recording = 1:size(meta_data,1)
     figure;
     t = tiledlayout(3,1);
     nexttile; 
-    plot(D.time, 1e-6*D(indchantype(D, 'MEGMAG', 'GOOD'),:,1));
+    plot(D.time, 1e-6*D(indchantype(D, 'MEGMAG', 'GOOD'),:,1), 'LineWidth', 3);
+    C = linspecer(length(indchantype(D, 'MEGMAG', 'GOOD')));
+    set(gca, 'ColorOrder', C);
     ylabel('B (nT)');
     ylim([-15 15]);
     xticklabels({});
@@ -213,32 +155,32 @@ for recording = 1:size(meta_data,1)
         
     nexttile;
     if strcmp(opti_data.cfg.LengthUnits, 'Meters')
-        plot(D.time, 1e3*(opti_data.Scannercast.RigidBody{:,7:9}-opti_data.Scannercast.RigidBody{1,7:9}), 'LineWidth', 2);
+        plot(D.time, opti_data.Scannercast.RigidBody{:,7:9}-opti_data.Scannercast.RigidBody{1,7:9}, 'LineWidth', 3);
     else
-        plot(D.time, opti_data.Scannercast.RigidBody{:,7:9}-opti_data.Scannercast.RigidBody{1,7:9}, 'LineWidth', 2);
+        plot(D.time, 1e-3*(opti_data.Scannercast.RigidBody{:,7:9}-opti_data.Scannercast.RigidBody{1,7:9}), 'LineWidth', 3);
     end
-    ylabel('Displacement (mm)');
+    ylabel({'Displace-'; 'ment (m)'});
     xlim([70, max(D.time)])
     xticklabels({});
-    set(gca, 'FontSize', 16);
-    ylim([-1200 1200]);
+    set(gca, 'FontSize', 24);
+    ylim([-2 2]);
     grid on; box on;
     legend({'Left-Right', 'Up-Down', 'Door-Screen'}, 'location', 'eastoutside');
-        
+   
     nexttile;
-    plot(D.time, 180*unwrap(quat2eul(opti_data.Scannercast.RigidBody{:,[6,3:5]}, 'XYZ'))/pi, 'LineWidth', 2);
+    plot(D.time, 180*quat2eul(opti_data.Scannercast.RigidBody{:,[6,3:5]}, 'XYZ')/pi, 'LineWidth', 3);
     xlabel('Time (s)');
-    ylabel('Rotation (deg)');
+    ylabel({'Rotation';'(deg)'});
     xlim([70, max(D.time)])
-    set(gca, 'FontSize', 16);
+    set(gca, 'FontSize', 24);
     ylim([-360 360]);
     grid on; box on;
     legend({'Pitch', 'Yaw', 'Roll'}, 'location', 'eastoutside');
-        
+
     t.TileSpacing = 'compact';
-    set(gcf, 'Position', [680   446   932   652]);
+    set(gcf, 'Position', [680   344   1172   652]);
     print(fullfile(meta_data{recording, "results_save_loc"}, ...
-        sprintf('%s_all_time_series', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+        sprintf('%s_all_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm'))),'-dpng','-r300');
     
     % Filter
     if isfile(['fff', D.fname])
@@ -265,8 +207,7 @@ for recording = 1:size(meta_data,1)
     end
     
     % Do both HFC and AMM (separately) to test difference later
-    proc_step_names = {'No spatial filter', 'HFC', 'HFC with first order gradients', 'AMM'};
-    DD = cell(1,4);
+    DD = cell(1,5);
     DD{1} = D;
 
     % HFC
@@ -288,35 +229,97 @@ for recording = 1:size(meta_data,1)
         DD{3} = spm_opm_hfc(S);
     end
     
+    % AMM without temporal extension
+    if isfile(['m2', D.fname])
+        DD{4} = spm_eeg_load(['m2', D.fname]);
+    else
+        S = [];
+        S.D = D;
+        S.corrLim = 1;
+        S.reducerank = 0;
+        S.prefix = 'm2';
+        DD{4} = spm_opm_amm(S);
+    end
+
     % AMM
     if isfile(['m', D.fname])
-        DD{4} = spm_eeg_load(['m', D.fname]);
+        DD{5} = spm_eeg_load(['m', D.fname]);
     else
         S = [];
         S.D = D;
         S.corrLim = 0.95;
-        S.reducerank = 1;
-        DD{4} = spm_opm_amm(S);
+        S.reducerank = 0;
+        DD{5} = spm_opm_amm(S);
     end
+
+    % Plot PSD
+    figure; hold on; grid on; box on;
+    co = colororder(gca);
+    line_style = {'-', '--', ':', '-.'};
+    ii = 0;
+    pl = [];
+    for proc_step = [1,2,4,5]
+        ii = ii+1;
+        S = [];
+        S.D = DD{proc_step};
+        S.channels = D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD'));
+        S.triallength = 10e3;
+        [po, freq] = spm_opm_psd(S);
+
+        mp = median(po,2);
+        sem = 1.2533*std(po,[],2)./sqrt(size(po,2));
+
+        fill([freq'; flipud(freq')], [min(mp-sem,[],2); flipud(max(mp+sem,[],2))], co(ii,:),...
+            'linestyle', 'none', 'FaceAlpha', 0.4)
+        pl(end+1) = plot(freq, mp, 'LineWidth', 2, 'LineStyle', line_style{ii}, 'color', co(ii,:));
+
+    end
+    set(gca,'yscale','log');
+    set(gca, 'FontSize', 22);
+    xlim([0 40]);
+    ylim([10 1e4]);
+    legend(pl, {'No spatial filter', 'HFC', 'AMM spatial', 'AMM with temporal'});
+    xlabel('Frequency (Hz)');
+    ylabel('PSD ($$fT\sqrt[-1]{Hz}$$)','interpreter','latex');
+
+    save_name = sprintf('PSD_after_temporal_filtering_%s', ...
+        extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm'));
+    print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
     
     % Plot shielding factors
-    for proc_step = 2:4
+    figure; hold on; grid on; box on;
+    ii = 1;
+    pl = [];
+    for proc_step = [2,4,5]
+        ii = ii + 1;
+
         S = [];
         S.D1 = DD{1};
         S.D2 = DD{proc_step};
         S.channels = D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD'));
-        S.plot = 1;
+        S.plot = 0;
         S.triallength = 10e3;
         S.dB = 1;
-        spm_opm_rpsd(S);
-        xlim([0 100]);
-        ylim([-20 50])
-        print(fullfile(meta_data{recording, "results_save_loc"}, ...
-            sprintf('%s_shielding_factor_%s', ...
-            extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'), ...
-            strrep(proc_step_names{proc_step}, ' ', '_'))),'-dpng','-r300');
+        [shield, freq] = spm_opm_rpsd(S);
+
+        mp = median(shield,2);
+        sem = 1.2533*std(shield,[],2)./sqrt(size(shield,2));
+
+        fill([freq'; flipud(freq')], [min(mp-sem,[],2); flipud(max(mp+sem,[],2))], co(ii,:),...
+            'linestyle', 'none', 'FaceAlpha', 0.4)
+        pl(end+1) = plot(freq, mp, 'LineWidth', 2, 'color', co(ii,:), 'LineStyle', line_style{ii});
     end
-        
+
+    set(gca, 'FontSize', 22);
+    xlim([0 40]);
+    ylim([0 30]);
+    legend(pl, {'HFC', 'AMM spatial', 'AMM with temporal'});
+    xlabel('Frequency (Hz)');
+    ylabel('Shielding Factor (dB)');
+
+    save_name = sprintf('Shielding_factor_after_temporal_filtering_%s', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+    print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
+    
     
     % Epoch
     for pp = 1:length(DD)
@@ -341,14 +344,22 @@ for recording = 1:size(meta_data,1)
 
         DD{pp} = D;
     end
+
+    close all;
 end
     
 %% Plot time series
-    
-for recording = 1:size(meta_data,1)
 
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_mffft_'};
-    for pp = 1:4
+for recording = 1:size(meta_data,1)
+    
+    if strcmp(meta_data{recording, "sub"}, 'sub-002')
+        rad_ax = 'Z';
+    else
+        rad_ax = 'Y';
+    end
+
+    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'};
+    for pp = 1:length(start_string)
         DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
             strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
     end
@@ -365,28 +376,26 @@ for recording = 1:size(meta_data,1)
         max_colour = interp1([min(abs(t(:,tind))), max(abs(t(:,tind)))], [0.9, 0], abs(t(:,tind)));
         [~, plot_order] = sort(max_colour, 'descend');
         max_colour = repmat(max_colour, 1, 3);
-
-        % Save maximum channel for later
-        if pp == 4
-            max_chan = plot_order(end);
-            meg_chans = D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD'));
-            max_chan = meg_chans{max_chan};
-        end
     
         % Plot t stat
         figure; hold on; grid on; box on;
         for chan = 1:size(t,1)
-            plot(D.time, t(plot_order(chan),:), 'color', max_colour(plot_order(chan),:));
+            plot(1e3*D.time, t(plot_order(chan),:), 'color', max_colour(plot_order(chan),:), 'LineWidth', 2);
         end
-        a = tinv(1-0.025/size(D,2), size(D,3)-1);
-        l1 = plot([-0.1 0.4], [a a], 'b--');
-        plot([-0.1 0.4], [-a -a], 'b--');
-        legend(l1, 'Significance Threshold')
-        xlim([-0.1 0.4]);
-        ylim([-25 25]);
-        xlabel('Time (s)');
+        a = tinv(1-0.025/(size(D,2)*length(plot_order)), size(D,3)-1);
+        l1 = plot([-100 400], [a a], 'b--', 'LineWidth', 2);
+        plot([-100 400], [-a -a], 'b--', 'LineWidth', 2);
+        % legend(l1, 'Sig. Threshold')
+        xlim([-100 400]);
+        if contains(meta_data{recording, "raw_data_name"}, 'seat') || contains(meta_data{recording, "raw_data_name"}, 'Seat')
+            ylim([-25 25]);
+        else
+            ylim([-1 1]*13);
+        end
+        xlabel('Time (ms)');
         ylabel('t-stat');
-        set(gca, 'FontSize', 14);
+        set(gcf, 'Position', [680   654   451   344]);
+        set(gca, 'FontSize', 24);
         fname = D.fname;
         
         if pp == 1
@@ -395,27 +404,34 @@ for recording = 1:size(meta_data,1)
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
         elseif pp == 3
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+        elseif pp == 4
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
         else
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
         end
         if ~exist(save_loc, 'dir')
             mkdir(save_loc);
         end
-        print(fullfile(save_loc, sprintf('%s_t_stat_time_series', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+
+        save_name = sprintf('%s_t_stat_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        print(fullfile(save_loc, save_name),'-dpng','-r300');
     
         % Plot topography of t-stat at 100 ms
-        if isfile(sprintf('%s_2Dlayout.mat', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm')))
-            load(sprintf('%s_2Dlayout.mat', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm')));
+        lay_name = fullfile(meta_data{recording, "analysed_data_loc"}, ...
+            sprintf('%s_2Dlayout.mat', extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm')));
+
+        if isfile(lay_name)
+            load(lay_name);
         else
             fid = fiducials(D);
             fid_struct = struct('NAS', fid.fid.pnt(contains(fid.fid.label, 'nas'),:), ...
                 'LPA', fid.fid.pnt(contains(fid.fid.label, 'lpa'),:), ...
                 'RPA', fid.fid.pnt(contains(fid.fid.label, 'rpa'),:));
             pos = D.sensors('MEG').coilpos;
-            lay = spm_get_anatomical_layout(D.sensors('MEG').coilpos(endsWith(D.sensors('MEG').label, '-Y'),:), ...
-                D.sensors('MEG').label(endsWith(D.sensors('MEG').label, '-Y')),...
+            lay = spm_get_anatomical_layout(D.sensors('MEG').coilpos(endsWith(D.sensors('MEG').label, ['-', rad_ax]),:), ...
+                D.sensors('MEG').label(endsWith(D.sensors('MEG').label, ['-', rad_ax])),...
                 double(gifti(D.inv{1}.mesh.tess_scalp).vertices), fid_struct, 0);
-            save(sprintf('%s_2Dlayout', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm')), 'lay');
+            save(lay_name, 'lay');
         end
     
         data = ftraw(D);
@@ -431,271 +447,351 @@ for recording = 1:size(meta_data,1)
         cfg.layout    = lay;
         cfg.colorbar  = 'EastOutside';
         cfg.colorbartext = 't-stat (100 ms)';
-        cfg.zlim      = [-17 17];
+        if contains(meta_data{recording, "raw_data_name"}, 'seat') || contains(meta_data{recording, "raw_data_name"}, 'Seat')
+            cfg.zlim      = [-15 15];
+        else
+            cfg.zlim = [-1 1]*8.83;
+        end
         cfg.colormap  = colormap123;
         cfg.xlim = [100, 100]*1e-3;
         cfg.comment = 'no';
         cfg.figure = gca;
-        set(gca, 'FontSize', 16);
+        set(gca, 'FontSize', 24);
         ft_topoplotER(cfg, tavdata)
-        print(fullfile(save_loc, sprintf('%s_t_stat_topography', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+        set(gcf, 'Position', [994   704   404   274]);
+
+        save_name = sprintf('%s_t_stat_topography', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        print(fullfile(save_loc, save_name),'-dpng','-r300');
     
         % Plot average signal
         figure; hold on; grid on; box on;
         dat = mean(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),3);
         for chan = 1:size(t,1)
-            plot(D.time, dat(plot_order(chan),:), 'color', max_colour(plot_order(chan),:));
+            plot(1e3*D.time, dat(plot_order(chan),:), 'color', max_colour(plot_order(chan),:), 'LineWidth', 2);
         end
-        xlim([-0.1 0.4]);
-        ylim([-550 550]);
-        xlabel('Time (s)');
+        xlim([-100 400]);
+        ylim([-450 450]);
+        xlabel('Time (ms)');
         ylabel('B (fT)');
         grid on;
-        set(gca, 'FontSize', 14);
-        print(fullfile(save_loc, sprintf('%s_average_time_series', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+        set(gcf, 'Position', [680   654   451   344]);
+        set(gca, 'FontSize', 24);
+        save_name = sprintf('%s_average_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        print(fullfile(save_loc, save_name),'-dpng','-r300');
         
         % Topoplot
         figure;
         cfg.figure = gca;
         cfg.colorbartext = 'B (fT)';
-        set(gca, 'FontSize', 16);
-        cfg.zlim      = [-450, 450];
+        cfg.zlim      = [-250, 250];
         ft_topoplotER(cfg, avdata)
-        print(fullfile(save_loc, sprintf('%s_average_topography', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+        set(gcf, 'Position', [994   704   404   274]);
+        set(gca, 'FontSize', 24);
+
+        save_name = sprintf('%s_average_topography', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        print(fullfile(save_loc, save_name),'-dpng','-r300');
     end
 
     close all
 end
 
-    %% Source localisation and VOI analysis at auditory cortices for each preprocessing step (using DAiSS)
+%% Plot power spectral densities
+
+for closed_loop = [true, false]
+    for walking = [true, false]
+
+        if closed_loop
+            if walking
+                recording_order = {"sub-001_task-walkingClosed_meg.lvm", ...
+                    "sub-002_task-walkingClosed_meg.lvm", "sub-003_task-walkingClosed_run-001_meg.lvm", ...
+                    "sub-003_task-walkingClosed_run-002_meg.lvm"};
+            else
+                recording_order = {"sub-001_task-seatedClosed_meg.lvm", ...
+                    "sub-002_task-seatedClosed_meg.lvm", "sub-003_task-seatedClosed_meg.lvm"};
+            end
+        else
+            if walking
+                recording_order = {"sub-001_task-walkingOpen_meg.lvm", ...
+                    "sub-002_task-walkingOpen_meg.lvm", "sub-003_task-walkingOpen_run-001_meg.lvm", ...
+                    "sub-003_task-walkingOpen_run-002_meg.lvm"};
+            else
+                recording_order = {"sub-001_task-seatedOpen_meg.lvm", ...
+                    "sub-002_task-seatedOpen_meg.lvm", "sub-003_task-seatedOpen_meg.lvm"};
+            end
+        end
+        
+        % Plot PSD
+        figure; hold on; grid on; box on;
+        co = colororder(gca);
+        line_style = {'-', '--', ':', '-.'};
+        DD = [];
+        pl = [];
+        ii = 0;
+        
+        start_string = {'ffft_', 'hffft_', 'm2ffft_', 'mffft_'};
+        ref_freq = 0:0.1:187.5;
+        
+        for pp = 1:length(start_string)
+            pof = [];
+            for recording = 1:length(recording_order)
+                rec_idx = find(contains(meta_data.raw_data_name, recording_order{recording}));
+
+                DD = spm_eeg_load(char(fullfile(meta_data{rec_idx, "analysed_data_loc"}, ...
+                    strcat(start_string{pp}, extractBefore(recording_order{recording}, '.lvm'), '.mat'))));
+            
+                S = [];
+                S.D = DD;
+                S.channels = DD.chanlabels(indchantype(DD, 'MEGMAG', 'GOOD'));
+                S.triallength = 10e3;
+                [po, freq] = spm_opm_psd(S);
+        
+                F = griddedInterpolant(freq', po, 'linear');
+                po = F(ref_freq);
+        
+                pof = [pof, mean(po, 2)];
+            end
+        
+            ii = ii+1;
+        
+            mp = mean(pof, 2);
+            sem = std(pof,[],2)./sqrt(size(pof,2));
+        
+            fill([ref_freq'; flipud(ref_freq')], [mp-sem; flipud(mp+sem)], co(ii,:),...
+                'linestyle', 'none', 'FaceAlpha', 0.4)
+            pl(end+1) = plot(ref_freq, mp, 'LineWidth', 2, 'LineStyle', line_style{ii}, 'color', co(ii,:));
+        
+        end
+        set(gca,'yscale','log');
+        set(gca, 'FontSize', 18);
+        xlim([0 40]);
+        ylim([10 1e4]);
+        legend(pl, {'No spatial filter', 'HFC', 'AMM spatial', 'AMM with temporal'});
+        xlabel('Frequency (Hz)');
+        ylabel('PSD ($$fT\sqrt[-1]{Hz}$$)','interpreter','latex');
+        
+        if closed_loop
+            if walking
+                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_walking'),'-dpng','-r300');
+            else
+                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_seated'),'-dpng','-r300');
+            end
+        else
+            if walking
+                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_walking'),'-dpng','-r300');
+            else
+                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_seated'),'-dpng','-r300');
+            end
+        end
+
+        % Plot shielding factor
+        figure; hold on; grid on; box on;
     
-for recording = 1:size(meta_data,1)
+        ii = 1;
+        pl = [];
+        for pp = 2:length(start_string)
+            shf = [];
+            for recording = 1:length(recording_order)
 
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_mffft_'};
-    for pp = 1:4
-        DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
-            strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
-    end
+                rec_idx = find(contains(meta_data.raw_data_name, recording_order{recording}));
 
-    MD = cell(1, length(DD));
+                S = [];
+                S.D1 = spm_eeg_load(char(fullfile(meta_data{rec_idx, "analysed_data_loc"}, ...
+                    strcat(start_string{1}, extractBefore(meta_data{rec_idx, "raw_data_name"}, '.lvm'), '.mat'))));
+                S.D2 = spm_eeg_load(char(fullfile(meta_data{rec_idx, "analysed_data_loc"}, ...
+                    strcat(start_string{pp}, extractBefore(meta_data{rec_idx, "raw_data_name"}, '.lvm'), '.mat'))));
+                S.channels = S.D1.chanlabels(indchantype(D, 'MEGMAG', 'GOOD'));
+                S.plot = 0;
+                S.triallength = 10e3;
+                S.dB = 1;
+                [shield, freq] = spm_opm_rpsd(S);
 
-    for pp = 1:length(DD)
+                F = griddedInterpolant(freq', shield, 'linear');
+                shield = F(ref_freq);
         
-        path_BF = 'BF.mat';
+                shf = [shf, mean(shield, 2)];
+                
+            end
+            ii = ii + 1;
 
-        % Prepare Data
-        S = [];
-        S.D = DD{pp}.fullfile;
-        S.dir = DD{pp}.path;
-        bf_wizard_data(S);
+            mp = mean(shf, 2);
+            sem = std(shf,[],2)./sqrt(size(shf,2));
 
-        % Create source space
-        S = [];
-        S.BF = 'BF.mat';
-        S.method = 'grid';
-        S.grid.resolution = 5;
-        bf_wizard_sources(S);
+            fill([ref_freq'; flipud(ref_freq')], [mp-sem; flipud(mp+sem)], co(ii,:),...
+                'linestyle', 'none', 'FaceAlpha', 0.4)
+            pl(end+1) = plot(ref_freq, mp, 'LineWidth', 2, 'color', co(ii,:), 'LineStyle', line_style{ii});
+        end
+        set(gca, 'FontSize', 18);
+        xlim([0 40]);
+        ylim([0 30]);
+        legend(pl, {'HFC', 'AMM spatial', 'AMM with temporal'});
+        xlabel('Frequency (Hz)');
+        ylabel('Shielding Factor (dB)');
 
-        % Estimate covariance matrix
-        S = [];
-        S.BF = 'BF.mat';
-        S.woi = [-inf inf];
-        S.conditions = 'all';
-        S.method = 'cov';
-        S.cov.taper = 'none';
-        S.cov.foi = [2 40]; % wide band matrix
-        S.modality = {'MEG'};
-        S.reg = 'mantrunc';
-        S.(S.reg).pcadim = 95;
-        S.visualise = 1;
-        bf_wizard_features(S);
-
-        % Estimate beamformer weights
-        S = [];
-        S.BF = 'BF.mat';
-        S.method = 'lcmv_hippocampus';
-        S.(S.method).bilateral = 'all';
-        bf_wizard_inverse(S);
-
-        % VOI
-        S = [];
-        S.BF = 'BF.mat';
-        S.method = 'montage';
-        S.montage.method = 'svd';
-        S.montage.vois{1}.voidef.label = 'rA1';
-        S.montage.vois{1}.voidef.pos = [54 -14 8];
-        S.montage.vois{1}.voidef.radius = 15;
-        S.montage.vois{2}.voidef.label = 'lA1';
-        S.montage.vois{2}.voidef.pos = [-54 -14 8];
-        S.montage.vois{2}.voidef.radius = 15;
-        bf_wizard_output(S);
-
-        % Write to SPM dataset
-        S = [];
-        S.BF = 'BF.mat';
-        S.method = 'meeg';
-        S.meeg.prefix = 'M';
-        bf_wizard_write(S);
-
-        % Plot
-        MD{pp} = spm_eeg_load(['M', DD{pp}.fname]);
-        S = [];
-        S.D = MD{pp};
-        mMD = spm_eeg_average(S);
-
-        good_trials = indtrial(MD{pp}, 'tone', 'GOOD');
-        se = std(MD{pp}(:,:,good_trials),[],3)./sqrt(length(good_trials));
-        t = mean(MD{pp}(:,:,good_trials),3)./se;
-
-        % plot the results
-        figure;
-        hold on
-        plot(MD{pp}.time, t,'linewidth',2)
-        grid on
-        
-        a = tinv(1-0.025/size(MD{pp},2), length(good_trials)-1);
-        l1 = plot([-0.1 0.4], [a a], 'b--');
-        plot([-0.1 0.4], [-a -a], 'b--');
-        legend([l1], 'Significance Threshold')
-        xlim([-0.1 0.4]);
-        ylim([-25 25]);
-        xlabel('Time (s)');
-        ylabel('t-stat');
-        set(gca, 'FontSize', 14);
-
-        if pp == 1
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
-        elseif pp == 2
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
-        elseif pp == 3
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+        if closed_loop
+            if walking
+                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_walking'),'-dpng','-r300');
+            else
+                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_seated'),'-dpng','-r300');
+            end
         else
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
+            if walking
+                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_walking'),'-dpng','-r300');
+            else
+                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_seated'),'-dpng','-r300');
+            end
         end
 
-        print(fullfile(save_loc, ...
-            sprintf('%s_VOI_t_val', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+    end
+end
 
-        % Source localisation
-        S = [];
-        S.BF = 'BF.mat';
-        S.conditions = {'tone'};
-        S.woi = [50 150];
-        S.foi = [2 40];
-        S.contrast = 1;
-        S.method = 'image_power';
-        S.image_power.scale = 0; % don't use unit-gain scaling
-        S.image_power.logpower = 0; % don't log transform the power
-        S.image_power.result = 'bytrial';
-        bf_wizard_output(S);
+%% Plot sensor positions and mark new sensor cabling
 
-        BF_signal = load('BF.mat');
+ctx = gifti(fullfile(spm('dir'), '\canonical\scalp_2562.surf.gii'));
+opm = [];
+opm.verts = [6.25 -7.25 6.2; 
+    -10.35 -7.25 6.2; 
+    -10.35 5.15 6.2; 
+    6.25 5.15 6.2; 
+    6.25 -7.25 -20.2; 
+    -10.35 -7.25 -20.2; 
+    -10.35 5.15 -20.2; 
+    6.25 5.15 -20.2];
+opm.faces = [1 2 6 5;2 3 7 6;3 4 8 7;4 1 5 8;1 2 3 4;5 6 7 8];
 
-        S = [];
-        S.BF = 'BF.mat';
-        S.conditions = {'tone'};
-        S.woi = [-150 -50];
-        S.foi = [2 40];
-        S.contrast = 1;
-        S.method = 'image_power';
-        S.image_power.scale = 0; % don't use unit-gain scaling
-        S.image_power.logpower = 0; % don't log transform the power
-        S.image_power.result = 'bytrial';
-        bf_wizard_output(S);
+opm.face_midpoints = zeros(size(opm.faces,1), 3);
+for ii = 1:size(opm.faces,1)
+    opm.face_midpoints(ii,:) = mean(opm.verts(opm.faces(ii,:), :), 1);
+end
 
-        BF_baseline = load('BF.mat');
+cp = [240, 80, 57; 61, 101, 165; 168, 182, 204]./255;
+surface_marker = {"square", "^", "o"};
 
-        % Paired T-test
-        pow_diff = zeros([size(BF_signal.output.image(1).val), length(good_trials)]);
-        for trial = 1:length(good_trials)
-            pow_diff(:,:,trial) = BF_signal.output.image(trial).val.^(1/4) - BF_baseline.output.image(trial).val.^(1/4);
-        end
-        se = std(pow_diff,[],3)./sqrt(size(pow_diff,3));
-        t = mean(pow_diff,3)./se;
-        a = tinv(1-0.025/size(pow_diff,2), size(pow_diff,3)-1);
+subIDs = unique(meta_data{:,'sub'});
+for sub = 1:length(subIDs)
+    % Get first recording
+    rec_inds = find(contains(meta_data{:,'sub'}, subIDs(sub)));
+    D = spm_eeg_load(char(fullfile(meta_data{rec_inds(1), "analysed_data_loc"}, ...
+            strcat(extractBefore(meta_data{rec_inds(1), "raw_data_name"}, '.lvm'), '.mat'))));
 
-        % Plot
-        source = BF_signal.sources.grid;
-        source.pos = BF_signal.sources.grid.allpos;
-        source = ft_transform_geometry(BF_signal.data.transforms.toNative, source);
-        source.pow = nan(size(source.pos, 1), 1);
-        source.pow(source.inside) = t;
-        source.mask = zeros(size(source.pow));
-        source.mask(source.inside) = t > a;
-        source.mask = source.mask*0.75;
-        
-        cfg = [];
-        cfg.parameter = {'pow', 'mask'};
-        cfg.downsample = 1;
-        cfg.showcallinfo = 'no';
-        sourceint = ft_sourceinterpolate(cfg, source, ft_read_mri(BF_signal.data.mesh.sMRI, 'dataformat', 'nifti_spm'));
-        
-        % Plot beamformer result
-        maxval = 22;
-        
-        cfg = [];
-        cfg.method        = 'ortho';
-        cfg.funparameter  = 'pow';
-        cfg.maskparameter = 'mask';
-        cfg.funcolorlim   = [0.0 maxval];
-        cfg.opacitylim    = [0 1];
-        cfg.location = 'max';
-        ft_sourceplot(cfg, sourceint);
-        print(fullfile(save_loc, ...
-            sprintf('%s_cross_brain_t_val', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+    % Get sensor positions and orientations
+    chanpos = D.sensors('MEG').chanpos;
+    chanori = D.sensors('MEG').chanori;
+    label = D.sensors('MEG').label;
+    label = extractAfter(label, '-');
 
-        % Write to nifti
-        outvol = spm_vol(BF_signal.data.mesh.sMRI);
-        outvol.dt(1) = spm_type('float32');
-        outvol.fname= char(fullfile(save_loc, sprintf('%s_BF_power_comp.nii', ...
-            extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))));
-        outvol = spm_create_vol(outvol);
-        Y = sourceint.pow;
-        spm_write_vol(outvol, Y);
+    % Go from channels to sensors
+    x_ori = -chanori(endsWith(label, '-X'),:);
+    y_ori = chanori(endsWith(label, '-Y'),:);
+    z_ori = chanori(endsWith(label, '-Z'),:);
+    chanpos = chanpos(endsWith(label, '-X'),:);
+    label = extractBefore(label(endsWith(label, '-X'),:), '-');
+
+    % Get which have the new cables
+    if strcmp(subIDs{sub}, 'sub-003') || strcmp(subIDs{sub}, 'sub-004')
+        new_cables = cellfun(@(x)strcmp(x(2), 'B'), label);
+    else
+        new_cables = ones(length(label),1);
     end
 
-    % Calculate improvement from prior spatial filters
-    for pp = 2:length(DD)
-        good_trials = indtrial(MD{pp}, 'tone', 'GOOD');
-        ts_diff = (abs(MD{pp}(:,:,good_trials)) - abs(MD{1}(:,:,good_trials)));
-        se = std(ts_diff, [], 3)./sqrt(length(good_trials));
-        t = mean(ts_diff, 3)./se;
+    % Get badchannels
+    badchans = D.chanlabels(badchannels(D));
+    badchans = unique(extractBefore(extractAfter(badchans, '-'), '-'));
+    [~, badchans] = intersect(label, badchans);
 
-        figure; hold on;
-        plot(MD{pp}.time, t, 'linewidth', 2);
-        grid on
-        
-        a = tinv(1-0.025/size(MD{pp},2), size(MD{pp},3)-1);
-        l1 = plot([-0.1 0.4], [a a], 'b--');
-        plot([-0.1 0.4], [-a -a], 'b--');
-        legend(l1, 'Significance Threshold')
-        xlim([-0.1 0.4]);
-        ylim([-25 25]);
-        xlabel('Time (s)');
-        ylabel('t-stat');
-        set(gca, 'FontSize', 14);
+    % Write out number of sensors, channels and badchannels for reporting
+    fprintf('%s : %.f sensors, %.f channels, %.f bad channels, %.f new cables\n',...
+        subIDs{sub}, length(label), length(indchantype(D, 'MEGMAG')), length(badchannels(D)), sum(new_cables))
 
-        if pp == 2
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
-        elseif pp == 3
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+    % Change sensor positions to MNI space
+    M = D.inv{1}.datareg.toMNI;
+    chanpos = M*cat(1, chanpos', ones(1, size(chanpos,1)));
+    chanpos = chanpos(1:3,:)';
+    x_ori = M(1:3,1:3)*x_ori';
+    x_ori = x_ori';
+    x_ori = x_ori./repmat(sqrt(sum(x_ori.^2, 2)), 1, 3);
+    y_ori = M(1:3,1:3)*y_ori';
+    y_ori = y_ori';
+    y_ori = y_ori./repmat(sqrt(sum(y_ori.^2, 2)), 1, 3);
+    z_ori = M(1:3,1:3)*z_ori';
+    z_ori = z_ori';
+    z_ori = z_ori./repmat(sqrt(sum(z_ori.^2, 2)), 1, 3);
+
+    % Plot
+    figure; hold on;
+    patch('Faces', ctx.faces, 'Vertices', ctx.vertices, 'FaceColor', [0.7 0.7 0.7], 'EdgeColor', 'None');
+    daspect([1 1 1]);
+    % Warp opm vertices to get patch at each sensor position
+    lbad_sens = [];
+    lold_wire = [];
+    lnew_wire = [];
+    for sens = 1:length(chanpos)
+        opm_warped_verts = repmat(chanpos(sens,:), size(opm.verts,1), 1) + ...
+            repmat(x_ori(sens,:), size(opm.verts,1), 1).*repmat(opm.verts(:,1), 1, size(x_ori,2)) + ...
+            repmat(y_ori(sens,:), size(opm.verts,1), 1).*repmat(opm.verts(:,2), 1, size(y_ori,2)) + ...
+            repmat(z_ori(sens,:), size(opm.verts,1), 1).*repmat(opm.verts(:,3), 1, size(z_ori,2));
+        opm_center = mean(opm_warped_verts, 1);
+        if any(ismember(badchans, sens))
+            if isempty(lbad_sens)
+                lbad_sens = scatter3(opm_center(1), opm_center(2), opm_center(3), 35, cp(1,:),...
+                    surface_marker{1}, 'filled', 'MarkerEdgeColor', 'k');
+            else
+                scatter3(opm_center(1), opm_center(2), opm_center(3), 35, cp(1,:), ...
+                    surface_marker{1}, 'filled', 'MarkerEdgeColor', 'k');
+            end
+            patch('Faces', opm.faces, 'Vertices', opm_warped_verts, 'FaceColor', cp(1,:), 'FaceAlpha', 0.6);
+
+        elseif new_cables(sens)
+            if isempty(lnew_wire)
+                lnew_wire = scatter3(opm_center(1), opm_center(2), opm_center(3), 35, cp(2,:),...
+                    surface_marker{2}, 'filled', 'MarkerEdgeColor', 'k');
+            else
+                scatter3(opm_center(1), opm_center(2), opm_center(3), 35, cp(2,:),...
+                    surface_marker{2}, 'filled', 'MarkerEdgeColor', 'k');
+            end
+            patch('Faces', opm.faces, 'Vertices', opm_warped_verts, 'FaceColor', cp(2,:), 'FaceAlpha', 0.6);
         else
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-         end
-
-        print(fullfile(save_loc, ...
-            sprintf('%s_VOI_t_val_filter_improvement', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+            if isempty(lold_wire)
+                lold_wire = scatter3(opm_center(1), opm_center(2), opm_center(3), 35, cp(3,:),...
+                    surface_marker{3}, 'filled', 'MarkerEdgeColor', 'k');
+            else
+                scatter3(opm_center(1), opm_center(2), opm_center(3), 35, cp(3,:),...
+                    surface_marker{3}, 'filled', 'MarkerEdgeColor', 'k');
+            end
+            patch('Faces', opm.faces, 'Vertices', opm_warped_verts, 'FaceColor', cp(3,:), 'FaceAlpha', 0.6);
+        end
     end
+    set(gca, 'Visible', 'off');
 
-    close all
+    % Save
+    view(-90,0);
+    print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_left_view"),'-dpng','-r300');
+    view(0,0);
+    print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_back_view"),'-dpng','-r300');
+    view(90,0);
+    print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_right_view"),'-dpng','-r300');
+    view(180,0);
+
+    if strcmp(subIDs{sub}, 'sub-002')
+        lgd = legend([lnew_wire, lbad_sens], 'Sensor with new wire', 'Bad channel', 'FontSize', 16);
+        pos = get(lgd, 'Position');
+        set(lgd, 'Position', [0.,0.82,pos(3),pos(4)])
+    else
+        lgd = legend([lnew_wire, lold_wire, lbad_sens], 'Sensor with new wire', 'Sensor with old wire', 'Bad channel', 'FontSize', 16);
+        pos = get(lgd, 'Position');
+        set(lgd, 'Position', [0.,0.79,pos(3),pos(4)])
+    end
+    
+    print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_front_view"),'-dpng','-r300');
 end
     
 %% ROI analysis, dipole
 
+DD = {};
+
 for recording = 1:size(meta_data,1)
 
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_mffft_'};
-    for pp = 1:4
+    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'};
+    for pp = 1:length(start_string)
         DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
             strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
     end
@@ -720,16 +816,17 @@ for recording = 1:size(meta_data,1)
 
         % Get significant t value
         df = length(good_trials)-1;
-        alpha = 0.025/size(X, 2);
+        alpha = 0.025/(size(X, 2)*size(X,1));
         sigt = tinv(1-alpha, df);
-        plot([min(DD{pp}.time), max(DD{pp}.time)]*1e3, sigt*[1 1], 'k--');
-        plot([min(DD{pp}.time), max(DD{pp}.time)]*1e3, -sigt*[1 1], 'k--');
+        plot([min(DD{pp}.time), max(DD{pp}.time)]*1e3, sigt*[1 1], 'k--', 'LineWidth', 2);
+        plot([min(DD{pp}.time), max(DD{pp}.time)]*1e3, -sigt*[1 1], 'k--', 'LineWidth', 2);
 
         xlim([-100 400]);
         ylim([-20 20])
         xlabel('Time (ms)');
         ylabel('t-stat');
-        set(gca, 'FontSize', 14);
+        set(gcf, 'Position', [680   654   451   344]);
+        set(gca, 'FontSize', 24);
 
         if pp == 1
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
@@ -737,12 +834,14 @@ for recording = 1:size(meta_data,1)
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
         elseif pp == 3
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+        elseif pp == 4
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
         else
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-         end
+        end
 
-        print(fullfile(save_loc, ...
-            sprintf('%s_ROI_t_val_dipole', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+        save_name = sprintf('%s_ROI_t_val_dipole', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        print(fullfile(save_loc, save_name),'-dpng','-r300');
     end
 end
 
@@ -762,8 +861,8 @@ n = round((8/muNeighbour)^2);
 
 for recording = 1:size(meta_data,1)
     cd(meta_data{recording, "analysed_data_loc"});
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_mffft_'};
-    for pp = 1:4
+    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'};
+    for pp = 1:length(start_string)
         DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
             strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
     end
@@ -879,284 +978,42 @@ for recording = 1:size(meta_data,1)
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
         elseif pp == 3
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+        elseif pp == 4
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
         else
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-         end
+        end
 
-        print(fullfile(save_loc, ...
-            sprintf('%s_min_norm_t_val_left', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+        save_name = sprintf('%s_min_norm_t_val_left', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        print(fullfile(save_loc, save_name),'-dpng','-r300');
 
         view ([90 0])             % rotate the object in the view
         camlight('headlight')
-        print(fullfile(save_loc, ...
-            sprintf('%s_min_norm_t_val_right', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
 
+        save_name = sprintf('%s_min_norm_t_val_right', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        print(fullfile(save_loc, save_name),'-dpng','-r300');
     end
 end
 
-%% Mismatch negativity
-
-for recording = 1:size(meta_data,1)
-
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_mffft_'};
-    for pp = 1:4
-        DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
-            strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
-    end
-
-    % Get stim file
-    stim = readtable(meta_data{recording, "stim_data_fname"});
-    deviants = find(contains(stim.Condition, 'deviant'));
-    trial_length = diff(deviants);
-    trial_length = cat(1, trial_length, size(D,3) - max(deviants) + 1);
-
-    % Just keep sets with 5 or more standard tones
-    deviants = deviants(trial_length >= 5);
-    standards = deviants + 4;
-
-    % Plot paired t-test
-    for pp = 1:length(DD)
-        D = DD{pp};
-        
-        ds = D(indchantype(D, 'MEGMAG', 'GOOD'), :, deviants) - D(indchantype(D, 'MEGMAG', 'GOOD'), :, standards);
-        mds = mean(ds, 3);
-        seds = std(ds, [], 3)/sqrt(size(ds,3));
-        t = mds./seds;
-
-        [~, tind] = min(abs(D.time - 175*1e-3));
-        max_colour = interp1([min(abs(t(:,tind))), max(abs(t(:,tind)))], [0.9, 0], abs(t(:,tind)));
-        [~, plot_order] = sort(max_colour, 'descend');
-        max_colour = repmat(max_colour, 1, 3);
-    
-        % Plot t stat
-        figure; hold on; grid on; box on;
-        for chan = 1:size(t,1)
-            plot(D.time, t(plot_order(chan),:), 'color', max_colour(plot_order(chan),:));
-        end
-
-        a = tinv(1-0.025/size(D,2), size(ds,3)-1);
-        l1 = plot([-0.1 0.4], [a a], 'b--');
-        plot([-0.1 0.4], [-a -a], 'b--');
-        legend(l1, 'Significance Threshold')
-        xlim([-0.1 0.4]);
-        ylim([-10 10]);
-        xlabel('Time (s)');
-        ylabel('t-stat');
-        set(gca, 'FontSize', 14);
-        fname = D.fname;
-        
-        if pp == 1
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
-        elseif pp == 2
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
-        elseif pp == 3
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
-        else
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-        end
-        if ~exist(save_loc, 'dir')
-            mkdir(save_loc);
-        end
-        print(fullfile(save_loc, sprintf('%s_MMN_t_stat_time_series', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
-    
-    end
-end
-
-
-%% Shielding factor from AMM as a function of channel number
-
-addpath('D:\Data\Neuro1\Auditory');
-nopms = 33:2:43;
-
-for recording = 1:size(meta_data,1)
-    
-    cd(meta_data{recording, "analysed_data_loc"});
-
-    figure; 
-    ax = subplot(1,1,1); hold on; grid on; box on;
-    D = spm_eeg_load(['ffft_', char(meta_data{recording,"raw_data_name"})]);
-
-    % Subsample sensors
-    Damm = cell(1, length(nopms)+1);
-    Damm{end} = spm_eeg_load(['m', D.fname]);
-
-    for nchans = 1:length(nopms)
-        % Define cost function
-        CF = @(x)evenly_space_sensors_CF(D.sensors('MEG').chanpos(endsWith(D.sensors('MEG').label, '-X'),:), x);
-        sens_inds = randperm(size(D.sensors('MEG').chanpos(endsWith(D.sensors('MEG').label, '-X'),:),1), nopms(nchans));
-        CF_cur = CF(sens_inds);
-        for iter = 1:50000
-            sens_inds_tmp = randperm(size(D.sensors('MEG').chanpos(endsWith(D.sensors('MEG').label, '-X'),:),1), nopms(nchans));
-            CF_new = CF(sens_inds_tmp);
-            if CF_new < CF_cur
-                sens_inds = sens_inds_tmp;
-                CF_cur = CF_new;
-            end
-        end
-    
-        figure
-        ft_plot_sens(D.sensors('MEG'));
-        hold on;
-        plot3(D.sensors('MEG').chanpos(sens_inds,1), D.sensors('MEG').chanpos(sens_inds,2), D.sensors('MEG').chanpos(sens_inds,3), 'bx', 'MarkerSize', 20);
-    
-        % Create array of labels
-        chanlabels = cat(2, cellfun(@(x)[x(1:end-1), 'X'], D.sensors('MEG').label(sens_inds), 'UniformOutput', false), ...
-            cellfun(@(x)[x(1:end-1), 'Y'], D.sensors('MEG').label(sens_inds), 'UniformOutput', false), ...
-            cellfun(@(x)[x(1:end-1), 'Z'], D.sensors('MEG').label(sens_inds), 'UniformOutput', false));
-        chanlabels = reshape(chanlabels, 1, []);
-
-        % Subset OPMs
-        S = [];
-        S.D = D;
-        S.channels = chanlabels;
-        S.prefix = strcat('p', num2str(nchans));
-        Damm{nchans} = spm_eeg_crop(S);
-
-        % Apply AMM
-        S = [];
-        S.D = Damm{nchans};
-        S.corrLim = 0.95;
-        S.reducerank = 1;
-        Damm{nchans} = spm_opm_amm(S);
-    end
-
-    % Add line to figure;
-    for nchans = 1:length(Damm)
-        S = [];
-        if nchans < length(Damm)
-            S.D1 = spm_eeg_load([char(strcat('p', num2str(nchans))), D.fname]);
-        else
-            S.D1 = D;
-        end
-        S.D2 = spm_eeg_load(['m', S.D1.fname]);
-        S.channels = D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD'));
-        S.triallength = 10e3;
-        S.dB = 1;
-        [shield, f] = spm_opm_rpsd(S);
-        plot(ax, f, median(shield, 2));
-    end
-
-    xlim([0 100]);
-    ylim([-20 50])
-    print(fullfile(meta_data{recording, "results_save_loc"}, ...
-        sprintf('%s_shielding_factor_%s', ...
-        extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'), ...
-        strrep(proc_step_names{proc_step}, ' ', '_'))),'-dpng','-r300');
-end
-
-%% Split epochs into groups by field change
-
-% Get channel with highest t value at 100ms in seated, closed loop,
-% fully preprocessed recording
-subIDs = cellstr(unique(meta_data{:,"sub"}));
-max_chan = cell(1, length(subIDs));
-
-for sub = 1:length(subIDs)
-    raw_dat_names = meta_data{ismember(meta_data.sub, subIDs{sub}), "raw_data_name"};
-    seated_closed_dat_name = raw_dat_names(logical(contains(raw_dat_names, 'seated').*contains(raw_dat_names, 'closed')));
-    recording = contains(meta_data{:, "raw_data_name"}, seated_closed_dat_name);
-
-    cd(meta_data{recording, "analysed_data_loc"});
-    D = spm_eeg_load(['e_mffft_', char(strrep(seated_closed_dat_name, '.lvm', '.mat'))]);
-
-    good_trials = indtrial(D, 'tone', 'GOOD');
-    se = std(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),[],3)./sqrt(length(good_trials));
-    t = mean(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),3)./se;
-        
-    [~, tind] = min(abs(D.time - 99*1e-3));
-    max_colour = interp1([min(abs(t(:,tind))), max(abs(t(:,tind)))], [0.9, 0], abs(t(:,tind)));
-    [~, plot_order] = sort(max_colour, 'descend');
-    max_colour = repmat(max_colour, 1, 3);
-
-    max_chan_tmp = plot_order(end);
-    meg_chans = D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD'));
-    max_chan{sub} = meg_chans{max_chan_tmp};
-end
-
-for recording = 1:size(meta_data,1)
-    
-    cd(meta_data{recording, "analysed_data_loc"});
-
-    % Epoch unfiltered/non-processed data
-    D = spm_eeg_load(['t_', char(meta_data{recording,"raw_data_name"})]);
-
-    if isfile(['e_', D.fname])
-        D = spm_eeg_load(['e_', D.fname]);
-    else
-        S = [];
-        S.D = D;
-        S.timewin = [-200 500];
-        S.condLabels = {'tone'};
-        if strcmp(meta_data{recording, 'sub'}, 'sub-003')
-            S.triggerChannels = {'AI16'};
-        elseif strcmp(meta_data{recording, 'sub'}, 'sub-004')
-            S.triggerChannels = {'AI8'};
-        end
-        D = spm_opm_epoch_trigger(S);
-
-        % Set all epochs after 500 to bad
-        goodTrials = indtrial(D, 'tone', 'GOOD');
-        D = badtrials(D, goodTrials(501:end), 1);
-        save(D);
-    end
-
-    % Cluster
-    [~,sinds] = spm_match_str(D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD')), D.sensors('MEG').label);
-    goodTrials = indtrial(D, 'tone', 'GOOD');
-    data = zeros(3, length(goodTrials));
-    for trial = 1:length(goodTrials)
-        [~, fiftyms_time] = min(abs(D.time - 50e-3));
-        [~, onefiftyms_time] = min(abs(D.time - 150e-3));
-        B_est = pinv(D.sensors('MEG').coilori(sinds,:))*D(indchantype(D, 'MEGMAG', 'GOOD'), [fiftyms_time, onefiftyms_time], goodTrials(trial));
-        data(:, trial) = diff(B_est, 1, 2);
-    end
-
-    % Select trials with largest increase in Bz
-    [~, idx_inc] = maxk(data(3,:), 0.1*size(data,2));
-
-    % Select trials with largest decrease in Bz
-    [~, idx_dec] = mink(data(3,:), 0.1*size(data,2));
-
-    % Select 10% of trials with least change in Bz
-    [~, idx_mid] = mink(abs(data(3,:)), 0.1*size(data,2));
-
-    % Get epoched, analysed data for recording
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_mffft_'};
-    for pp = 1:4
-        DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
-            strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
-    end
-
-    sub = strcmp(subIDs, meta_data{recording, 'sub'});
-    for pp = 1:length(DD)
-        D = DD{pp};
-        figure; hold on;
-        plot(D.time, mean(D(indchannel(D, max_chan{sub}),:,idx_mid),3));
-        plot(D.time, mean(D(indchannel(D, max_chan{sub}),:,idx_inc),3));
-        plot(D.time, mean(D(indchannel(D, max_chan{sub}),:,idx_dec),3));
-        legend('No change', 'Increase', 'Decrease')
-
-        figure; hold on;
-        SE = std(D(indchannel(D, max_chan{sub}),:,idx_mid), [], 3);
-        plot(D.time, mean(D(indchannel(D, max_chan{sub}),:,idx_mid)./sqrt(SE),3));
-        SE = std(D(indchannel(D, max_chan{sub}),:,idx_inc), [], 3);
-        plot(D.time, mean(D(indchannel(D, max_chan{sub}),:,idx_inc)./sqrt(SE),3));
-        SE = std(D(indchannel(D, max_chan{sub}),:,idx_dec), [], 3);
-        plot(D.time, mean(D(indchannel(D, max_chan{sub}),:,idx_dec)./sqrt(SE),3));
-        legend('No change', 'Increase', 'Decrease')
-    end
-end
 
 %% Get head position and orientation in room space
 
 for recording = 1:size(meta_data,1)
 
+    cd(meta_data{recording, "analysed_data_loc"});
+    D = spm_eeg_load(['t_', char(meta_data{recording,"raw_data_name"})]);
+
+    if strcmp(meta_data{recording, "sub"}, 'sub-002')
+        rad_ax = 'Z';
+    else
+        rad_ax = 'Y';
+    end
+
     load(fullfile(meta_data{recording, "analysed_data_loc"}, ...
         strcat('opti_data_t_', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat')));
-    
-    marker_slots = readtable(fullfile(extractBefore(rawDataPath, 'rawData'), 'optitrack_marker_slots.csv'));
-    table_of_info = fullfile(extractBefore(rawDataPath, meta_data{recording, 'sub'}), meta_data{recording, 'sub'}, ...
-        'scanner-cast', 'table_of_info.csv');
+  
+    marker_slots = readtable(fullfile(meta_data{recording, "raw_data_loc"}, 'optitrack_marker_slots.csv'));
+    table_of_info = fullfile(meta_data{recording, "raw_data_loc"}, 'scanner_cast_table_of_info.csv');
     clear R T
 
     % Set marker heights
@@ -1164,23 +1021,26 @@ for recording = 1:size(meta_data,1)
     marker_height_cm(strcmp(marker_slots.height, "tall")) = 56.19;
     marker_height_cm(strcmp(marker_slots.height, "mid")) = 49.69;
     marker_height_cm(strcmp(marker_slots.height, "short")) = 40.73;
+
+    if strcmp(meta_data{recording, "sub"}, 'sub-002')
+        marker_height_cm(:) = 35;
+    end
     
     % Get marker positions in MRI coordinates
     MarkerPosMRI = getMarkerPosInMRIcoords(table_of_info,...
-        marker_slots.slot, transpose(marker_height_cm), opti_data, 'Scannercast');
+        marker_slots.slot, transpose(marker_height_cm), opti_data, 'Scannercast', rad_ax);
     
     % Get transformation matrices to go from MRI to room coordinates
     [~, ~, R, T] = getMagPosOriOverTime(opti_data, MarkerPosMRI, D, 'Scannercast');
     
     % Find head center over time
-    D = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
-            strcat('e_ffft_', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
     ctx = gifti(D.inv{1}.mesh.tess_ctx);
     cortex_center_MRI = transpose(mean(ctx.vertices,1));
     head_orientation_MRI = [0 1 0]';
     clear ctx
     cortex_center_Room = zeros(3, size(T,2));
     head_orientation_Room = zeros(3, size(T,2));
+    yaw_pitch_roll = zeros(size(T,2), 3);
     for tt = 1:size(T,2)
         cortex_center_Room(:,tt) = R(:,:,tt)*cortex_center_MRI + T(:,tt);
         head_orientation_Room(:,tt) = R(:,:,tt)*head_orientation_MRI;
@@ -1220,10 +1080,18 @@ for recording = 1:size(meta_data,1)
     % Shift step_out back by 13 points (consistently too small, I think due
     % to the previous interpolation of the optitrack data from sampling at
     % 120 Hz to 1500 Hz, which is roughly 13 samples)
-    for gap = 1:length(step_out)
-        good_opt_data(step_out(gap):step_out(gap)+26) = 0;
+    % Account for lower sampling rate (375 Hz) of sub002
+    if strcmp(meta_data{recording, 'sub'}, 'sub002')
+        for gap = 1:length(step_out)
+            good_opt_data(step_out(gap):step_out(gap)+4) = 0;
+        end
+        step_out = step_out + 4;
+    else
+        for gap = 1:length(step_out)
+            good_opt_data(step_out(gap):step_out(gap)+26) = 0;
+        end
+        step_out = step_out + 26;
     end
-    step_out = step_out + 26;
 
     good_opt_data = int8(good_opt_data);
         
@@ -1258,37 +1126,357 @@ for recording = 1:size(meta_data,1)
     %% Plot trajectory
 
     figure; hold on; grid on; box on;
-    plot3(interp_cortex_center(good_opt_data==1,1), ...
-        interp_cortex_center(good_opt_data==1,2), ...
-        interp_cortex_center(good_opt_data==1,3), '.', 'color', [0.2666, 0.4471, 0.7686]);
+    plot3(interp_cortex_center(good_opt_data==1,1)/10, ...
+        interp_cortex_center(good_opt_data==1,2)/10, ...
+        interp_cortex_center(good_opt_data==1,3)/10, '.', 'color', [0.2666, 0.4471, 0.7686]);
     if any(good_opt_data == 0)
-        plot3(interp_cortex_center(good_opt_data==0,1), ...
-            interp_cortex_center(good_opt_data==0,2), ...
-            interp_cortex_center(good_opt_data==0,3), ...
+        plot3(interp_cortex_center(good_opt_data==0,1)/10, ...
+            interp_cortex_center(good_opt_data==0,2)/10, ...
+            interp_cortex_center(good_opt_data==0,3)/10, ...
             '.', 'color', [0.5647, 0.6706, 0.8627], 'MarkerSize', 0.5);
     end
-    good_inds = find(good_opt_data==1);
-    quiver3(interp_cortex_center(good_inds(1:1000:end),1), ...
-        repmat(max(interp_cortex_center(good_inds(1:1000:end),2)), length(good_inds(1:1000:end)), 1), ...
-        interp_cortex_center(good_inds(1:1000:end),3), ...
-        head_orientation_Room(1, good_inds(1:1000:end))', ...
-        head_orientation_Room(2, good_inds(1:1000:end))', ...
-        head_orientation_Room(3, good_inds(1:1000:end))', 2, 'color', [0.1804, 0.1725, 0.1843])
 
-    zlim([-2 2]*1e3);
-    ylim([0, 3.1]*1e3);
-    xlim([-1.5, 1.5]*1e3);
+    zlim([-2 2]*1e2);
+    ylim([0, 3.1]*1e2);
+    xlim([-1.5, 1.5]*1e2);
     view(180,0);
     daspect([1 1 1]);
     set(gcf, 'Position', [680   670   497   308]);
     set(gca, 'FontSize', 14);
-    xlabel('X, left-right (mm)')
-    ylabel('Y, up-down (mm)')
-    zlabel('Z, forward-back (mm)');
+    xlabel('Left-Right (cm)')
+    ylabel('Up-Down (cm)')
+    zlabel('Forward-Back (cm)');
     set(gcf, 'color', 'w'); 
 
-    print(fullfile(meta_data{recording, "results_save_loc"}, ...
-        sprintf('%s_trajectory', extractBefore(meta_data{recording, "raw_data_name"}, ' Array 1.lvm'))),'-dpng','-r300');
+    save_name = sprintf('%s_trajectory', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+    print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
+
+    %% Plot as histograms
+
+    % Get times where tones were playing
+    trigger = D(indchannel(D, meta_data{recording, "AudioTrig"}),:,1);
+    start_index = find(diff(trigger) > 2*range(trigger)/3, 1);
+    end_index = find(-diff(trigger) > 2*range(trigger)/3, 1, "last");
+
+    opt_data_keep = find(good_opt_data==1);
+    opt_data_keep = opt_data_keep((opt_data_keep >= start_index) & (opt_data_keep <= end_index));
+    displacement = interp_cortex_center(opt_data_keep,:);
+    displacement = displacement - displacement(1,:);
+
+    rotation = zeros(length(opt_data_keep), 3);
+    a = [0; 0; 1];
+    for tt = 1:length(opt_data_keep)
+        v = cross(a, head_orientation_Room(:, opt_data_keep(tt)));
+        s = sqrt(sum(v.^2, 1));
+        c = dot(a, head_orientation_Room(:, opt_data_keep(tt)));
+        vx = [0 -v(3) v(2); v(3) 0 -v(1); -v(2) v(1) 0];
+        R = eye(3) + vx + vx^2*(1-c)/(s^2);
+        rotation(tt,:) = rotm2eul(R, 'YXZ');
+    end
+
+    % Choose some colour palettes 
+    cp_rot = [255, 254, 203; 243, 119, 72; 146, 55, 77]./255;
+    cp_disp = [184, 226, 200; 99.5, 169.5, 157.5; 15, 113, 115]./255;
+    cp_B = [236, 190, 180]./255;
+
+    order_disp = {'Left-Right', 'Up-Down', 'Forward-Back'};
+    order_rot = {'Yaw', 'Pitch', 'Roll'};
+
+    save_str = extractBefore(meta_data{recording, "raw_data_name"}, '.lvm');
+
+    for ii = 1:size(displacement, 2)
+        figure;
+        histogram(displacement(:,ii)/10, -200:10:200, ...
+            'Normalization', 'probability', 'FaceColor', cp_disp(ii,:), 'FaceAlpha', 1);
+        xlim([-200, 200]);
+        if ii == 2
+            ylim([0, 1]);
+        else
+            if contains(meta_data{recording, "raw_data_name"}, 'walking')
+                ylim([0, 0.2]);
+            else
+                ylim([0, 1]);
+            end
+        end
+
+        set(gca,'FontSize',18);
+        xlabel('Distance (cm)','FontSize',20);
+        ylabel('Frequency','FontSize',20);
+        set(gcf, 'Position', [680   650   467   346]);
+        grid on;
+        title(order_disp{ii}, 'FontSize', 20);
+
+        print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_displacement_%s', save_str, order_disp{ii})),'-dpng','-r300');
+    end
+
+    for ii = 1:size(rotation, 2)
+        figure;
+        ax = polaraxes;
+        polarhistogram(rotation(:,ii),25,...
+            'Normalization','probability', 'FaceColor', cp_rot(ii,:));
+        thetalim([-180 180]);
+        ax.FontSizeMode = 'manual';
+        ax.FontSize = 18;
+        ax.RAxis.FontSize = 16;
+        title(order_rot{ii});
+        set(gcf, 'Position', [982   234   431   340]);
+        print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_rotation_%s', save_str, order_rot{ii})),'-dpng','-r300');
+    end
+
+    figure;
+    histogram(reshape(D(indchantype(D, 'MEGMAG', 'GOOD'),start_index:end_index,1)*1e-6, [], 1), ...
+        -15:0.5:15, 'Normalization', 'probability','FaceColor', cp_B, 'FaceAlpha', 1);
+    xlim([-15, 15]);
+    if contains(meta_data{recording, "raw_data_name"}, 'walk')
+        ylim([0, 0.16]);
+    else
+        ylim([0, 0.4]);
+    end
+    set(gca,'FontSize',18);
+    xlabel('Recorded Field (nT)','FontSize',22);
+    ylabel('Frequency','FontSize',22);
+    grid on;
+    set(gcf, 'Position', [1128, 244, 832, 638]);
+    print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_mag_field_hist', save_str)),'-dpng','-r300');
+
+    % Area covered
+    [~, area] = boundary(interp_cortex_center(opt_data_keep,[1,3]));
+
+    fprintf('%s: %s\n Area covered (m^2): %.2f\n Left-Right range (m): %.2f - %.2f (%.2f)\n Forward-Back (m): %.2f - %.2f (%.2f)\n', ...
+        meta_data{recording, "sub"}, meta_data{recording, "raw_data_name"}, area/1e6, min(displacement(:,1))/1e3, max(displacement(:,1))/1e3, ...
+        range(displacement(:,1))/1e3, min(displacement(:,3))/1e3, max(displacement(:,3))/1e3, range(displacement(:,3))/1e3);
+
+    %% Plot speed
+
+    % Look at each chunk individually to avoid edges
+    [~, step_in] = findpeaks(double(diff(good_opt_data(start_index:end_index))));
+    [~, step_out] = findpeaks(double(-diff(good_opt_data(start_index:end_index))));
+    step_in = step_in + 1;
+    first_good_val = find(good_opt_data(start_index:end_index), 1);
+    if isempty(step_in) || step_in(1) ~= first_good_val
+        step_in = cat(1, first_good_val, step_in);
+    end
+    last_good_val = find(good_opt_data(start_index:end_index), 1, 'last');
+    if last_good_val == length(good_opt_data(start_index:end_index))
+        step_out = cat(1, step_out, length(good_opt_data(start_index:end_index)));
+    end
+
+    speed = [];
+    for chunk = 1:size(step_in, 1)
+        speed = cat(1, speed, diff(interp_cortex_center((start_index + step_in(chunk)):(start_index + step_out(chunk)), :))/mean(diff(D.time)));
+    end
+
+    for ii = 1:size(displacement, 2)
+        figure;
+        histogram(speed(:,ii)/10, -75:2:75, ...
+            'Normalization', 'probability', 'FaceColor', cp_disp(ii,:), 'FaceAlpha', 1);
+        xlim([-75, 75]);
+        if ii == 2
+            ylim([0, 0.4]);
+        else
+            if contains(meta_data{recording, "raw_data_name"}, 'walk')
+                ylim([0, 0.05]);
+            else
+                ylim([0, 0.4]);
+            end
+        end
+
+        set(gca,'FontSize',18);
+        xlabel('Velocity (cm/s)','FontSize',20);
+        ylabel('Frequency','FontSize',20);
+        set(gcf, 'Position', [680   650   467   346]);
+        grid on;
+        title(order_disp{ii}, 'FontSize', 20);
+
+        print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_speed_%s', save_str, order_disp{ii})),'-dpng','-r300');
+    end
+
+    % Rate of change of magnetic field
+    figure;
+    histogram(reshape(diff(D(indchantype(D, 'MEGMAG', 'GOOD'),start_index:end_index,1)*1e-6, 1, 2)./mean(diff(D.time)), [], 1), ...
+        -8:0.5:8, 'Normalization', 'probability','FaceColor', cp_B, 'FaceAlpha', 1);
+    xlim([-8, 8]);
+    if contains(meta_data{recording, "raw_data_name"}, 'walk')
+        ylim([0, 0.2]);
+    else
+        ylim([0, 0.7]);
+    end
+    % ylim([0 0.15]);
+    set(gca,'FontSize',18);
+    xlabel('Recorded Field Temporal Gradient (nT/s)','FontSize',22);
+    ylabel('Frequency','FontSize',22);
+    grid on;
+    set(gcf, 'Position', [1128, 244, 832, 638]);
+    print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_mag_field_rate_of_change_hist', save_str)),'-dpng','-r300');
 
 end
 
+%% Magnetic field histograms
+
+closed_loop = false; % Boolean - plot closed loop or open loop
+
+figure; 
+ax = subplot(1,1,1); hold on; grid on; box on;
+cmap = linspecer(4);
+markers = {'s', 'o', '^', 'd'};
+counter = 0;
+
+if closed_loop
+    recording_order = {"sub-001_task-walkingClosed_meg.lvm", ...
+        "sub-002_task-walkingClosed_meg.lvm", "sub-003_task-walkingClosed_run-001_meg.lvm", ...
+        "sub-003_task-walkingClosed_run-002_meg.lvm"};
+else
+    recording_order = {"sub-001_task-walkingOpen_meg.lvm", ...
+        "sub-002_task-walkingOpen_meg.lvm", "sub-003_task-walkingOpen_run-001_meg.lvm", ...
+        "sub-003_task-walkingOpen_run-002_meg.lvm"};
+end
+
+recording_order_name = {'A)', 'B)', 'C)', 'D)'};
+
+figure; 
+t = tiledlayout("vertical");
+h = gobjects(length(recording_order),1);
+for ii = 1:length(recording_order)
+    h(ii) = nexttile; hold on; grid on; box on;
+end
+
+for recording = 1:length(recording_order)
+    
+    rec_idx = find(contains(meta_data.raw_data_name, recording_order{recording}));
+
+    h1 = figure;
+    
+    cd(meta_data{rec_idx, "analysed_data_loc"});
+    D = spm_eeg_load(['t_', char(meta_data{rec_idx,"raw_data_name"})]);
+
+    trigger = D(indchannel(D, meta_data{rec_idx, "AudioTrig"}),:,1);
+    start_index = find(diff(trigger) > 2*range(trigger)/3, 1);
+    end_index = find(-diff(trigger) > 2*range(trigger)/3, 1, "last");
+
+    dat = D(indchantype(D, 'MEGMAG', 'GOOD'),start_index:end_index,1)*1e-6;
+    
+    hh = histogram(dat(:), -15:0.5:15, 'Normalization', 'probability', 'DisplayName', meta_data{rec_idx, "sub"});
+    bin_centers = hh.BinEdges(1:end-1) + diff(hh.BinEdges);
+
+    % just choose bins that aren't empty
+    filled_bins = hh.Values ~= 0;
+
+    f = fit(bin_centers(filled_bins)', hh.Values(filled_bins)', 'gauss1');
+    scatter(ax, bin_centers(filled_bins), hh.Values(filled_bins), markers{recording}, 'filled', ...
+        'MarkerFaceColor', cmap(recording,:), 'DisplayName', sprintf('%s %.2f', recording_order_name{recording}, 2*sqrt(2*log(2))*f.c1));
+    x = min(bin_centers(filled_bins)):0.05:max(bin_centers(filled_bins));
+    plot(ax, x, f(x'), '-', 'color', cmap(recording,:), 'HandleVisibility', 'off', 'LineWidth', 2);
+
+    [~, max_range_chan] = max(range(dat, 2));
+
+    fprintf('%s: %s\n range (nT): %.3f - %.3f\n single channel range (nT): %.3f - %.3f (%.3f)\n gaussian fit: \n   scale = %.3f, \n   mean = %.3f, \n   std = %.3f\n', ...
+        meta_data{rec_idx, "sub"}, meta_data{rec_idx, "raw_data_name"}, min(dat(:)), max(dat(:)), ...
+        min(dat(max_range_chan,:)), max(dat(max_range_chan,:)), range(dat(max_range_chan,:)), f.a1, f.b1, f.c1);
+
+    close(h1);
+
+    % Plot time series
+    plot(h(recording), D.time(start_index:end_index) - D.time(start_index), dat, 'LineWidth', 1.5);
+    C = linspecer(size(dat,1)*2);
+    C = cat(1, C(1:ceil(size(C,1)/4),:), C(3*floor(size(C,1)/4):end,:));
+    set(h(recording), 'ColorOrder', C);
+    xlim(h(recording), [0, D.time(end_index) - D.time(start_index)]);
+end
+
+xlim(ax, [-15, 15]);
+ylim(ax, [0, 0.16]);
+set(ax,'FontSize',12);
+xlabel(ax, 'Recorded Field (nT)','FontSize',14);
+ylabel(ax, 'Frequency','FontSize',14);
+lgd = legend(ax);
+title(lgd, 'FWHM (nT)');
+
+figure(ax.Parent);
+if closed_loop
+    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_histogram'),'-dpng','-r300');
+else
+    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_histogram_open_loop'),'-dpng','-r300');
+end
+
+% Time Series
+for ii = 1:length(h)
+    ylim(h(ii), [-15 15]);
+    set(h(ii), 'FontSize', 12);
+    yl = ylabel(h(ii), recording_order_name{ii}, 'FontSize', 14);
+    set(yl,'rotation',0,'VerticalAlignment','middle')
+end
+ylabel(t, 'B (nT)', 'FontSize', 14);
+xlabel(t, 'Time (s)', 'FontSize', 14);
+figure(t.Parent);
+if closed_loop
+    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_time_series'),'-dpng','-r300');
+else
+    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_time_series_open_loop'),'-dpng','-r300');
+end
+
+
+%% Magnetic field change per second histograms
+
+closed_loop = false; % Boolean - plot closed loop or open loop
+
+figure; 
+ax = subplot(1,1,1); hold on; grid on; box on;
+cmap = linspecer(4);
+markers = {'s', 'o', '^', 'd'};
+counter = 0;
+
+if closed_loop
+    recording_order = {"sub-001_task-walkingClosed_meg.lvm", ...
+        "sub-002_task-walkingClosed_meg.lvm", "sub-003_task-walkingClosed_run-001_meg.lvm", ...
+        "sub-003_task-walkingClosed_run-002_meg.lvm"};
+else
+    recording_order = {"sub-001_task-walkingOpen_meg.lvm", ...
+        "sub-002_task-walkingOpen_meg.lvm", "sub-003_task-walkingOpen_run-001_meg.lvm", ...
+        "sub-003_task-walkingOpen_run-002_meg.lvm"};
+end
+recording_order_name = {'A)', 'B)', 'C)', 'D)'};
+
+for recording = 1:length(recording_order)
+    
+    rec_idx = find(contains(meta_data.raw_data_name, recording_order{recording}));
+
+    h1 = figure;
+
+    cd(meta_data{rec_idx, "analysed_data_loc"});
+    D = spm_eeg_load(['t_', char(meta_data{rec_idx,"raw_data_name"})]);
+
+    trigger = D(indchannel(D, meta_data{rec_idx, "AudioTrig"}),:,1);
+    start_index = find(diff(trigger) > 2*range(trigger)/3, 1);
+    end_index = find(-diff(trigger) > 2*range(trigger)/3, 1, "last");
+
+    dat = diff(D(indchantype(D, 'MEGMAG', 'GOOD'),start_index:end_index,1)*1e-6, 1, 2)./mean(diff(D.time));
+    
+    hh = histogram(dat(:), -8:0.5:8, 'Normalization', 'probability', 'DisplayName', meta_data{rec_idx, "sub"});
+    bin_centers = hh.BinEdges(1:end-1) + diff(hh.BinEdges);
+
+    % just choose bins that aren't empty
+    filled_bins = hh.Values ~= 0;
+
+    f = fit(bin_centers(filled_bins)', hh.Values(filled_bins)', 'gauss1');
+    scatter(ax, bin_centers(filled_bins), hh.Values(filled_bins), markers{recording}, 'filled', ...
+        'MarkerFaceColor', cmap(recording,:), 'DisplayName', sprintf('%s %.2f', recording_order_name{recording}, 2*sqrt(2*log(2))*f.c1));
+    x = min(bin_centers(filled_bins)):0.05:max(bin_centers(filled_bins));
+    plot(ax, x, f(x'), '-', 'color', cmap(recording,:), 'HandleVisibility', 'off', 'LineWidth', 2);
+
+    close(h1);
+end
+
+xlim(ax, [-8, 8]);
+ylim(ax, [0, 0.2]);
+set(ax,'FontSize',12);
+xlabel(ax, 'Recorded Field rate of change (nT/s)','FontSize',14);
+ylabel(ax, 'Frequency','FontSize',14);
+lgd = legend(ax);
+title(lgd, 'FWHM (nT/s)');
+
+figure(ax.Parent);
+if closed_loop
+    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_change_rate_histogram'),'-dpng','-r300');
+else
+    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_change_rate_histogram_open_loop'),'-dpng','-r300');
+end
