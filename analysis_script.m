@@ -1,23 +1,24 @@
 clear; close all;
 
-addpath('C:\Users\smellor\Documents\GitHub\optitrack');
+addpath('C:\Users\Stephanie Mellor\Documents\GitHub\optitrack');
 
-addpath('C:\Users\smellor\Documents\GitHub\spm-856cd60354d5a789b73e67de9e1faeb4163cf8fa\');
+addpath('C:\Users\Stephanie Mellor\Documents\GitHub\spm-856cd60354d5a789b73e67de9e1faeb4163cf8fa\');
 spm('defaults', 'eeg');
 
-addpath('C:\Users\smellor\Documents\GitHub\BrewerMap')
+addpath('C:\Users\Stephanie Mellor\Documents\GitHub\BrewerMap')
 colormap123 = colormap(flipud(brewermap(64,'RdBu')));
-addpath('C:\Users\smellor\Documents\GitHub\icp');
+addpath('C:\Users\Stephanie Mellor\Documents\GitHub\icp');
 
-addpath('C:\Users\smellor\Documents\GitHub\linspecer');
+addpath('C:\Users\Stephanie Mellor\Documents\GitHub\linspecer');
 
-addpath('C:\Users\smellor\Documents\GitHub\MEGsurfer');
+addpath('C:\Users\Stephanie Mellor\Documents\GitHub\MEGsurfer');
 
 %% Format meta data to do analysis
 
 delay = 10; % ms - neuro-1 delay between truth and recording
 
-cd('E:\Data\Neuro1\Auditory\anonymised_for_sharing');
+% cd('C:\Users\Stephanie Mellor\Documents\Data\Auditory\neuro1_walking_data\');
+cd('C:\Users\Stephanie Mellor\Documents\Data\Auditory\test_revision3_data');
 
 subIDs = {'sub-001', 'sub-002', 'sub-003'};
 
@@ -194,8 +195,10 @@ for recording = 1:size(meta_data,1)
 
     t.TileSpacing = 'compact';
     set(gcf, 'Position', [680   344   1172   652]);
-    print(fullfile(meta_data{recording, "results_save_loc"}, ...
-        sprintf('%s_all_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm'))),'-dpng','-r300');
+    % print(fullfile(meta_data{recording, "results_save_loc"}, ...
+    %     sprintf('%s_all_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm'))),'-dpng','-r300');
+    savefig(fullfile(meta_data{recording, "results_save_loc"}, ...
+        sprintf('%s_all_time_series.fig', extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm'))))
     
     % Filter
     if isfile(['fff', D.fname])
@@ -299,7 +302,8 @@ for recording = 1:size(meta_data,1)
 
     save_name = sprintf('PSD_after_temporal_filtering_%s', ...
         extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm'));
-    print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
+    % print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
+    savefig(fullfile(meta_data{recording, "results_save_loc"}, [save_name, '.fig']));
     
     % Plot shielding factors
     figure; hold on; grid on; box on;
@@ -333,7 +337,8 @@ for recording = 1:size(meta_data,1)
     ylabel('Shielding Factor (dB)');
 
     save_name = sprintf('Shielding_factor_after_temporal_filtering_%s', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-    print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
+    % print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
+    savefig(fullfile(meta_data{recording, "results_save_loc"}, [save_name, '.fig']));
     
     
     % Epoch
@@ -367,12 +372,14 @@ end
 
 clearvars -except meta_data colormap123 delay
 rng(76);
+start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'};
 
 for recording = 1:size(meta_data,1)
+
     fprintf('Recording no: %.f of %.f\n', recording, size(meta_data,1));
     cd(meta_data{recording, "analysed_data_loc"});
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'};
-    for pp = 1:length(start_string)
+
+    for pp = 1%1:length(start_string)
         DD = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
             strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
 
@@ -408,17 +415,17 @@ for recording = 1:size(meta_data,1)
         cfg.correctm = 'cluster';
         cfg.clusteralpha = 0.05;
         cfg.clusterstatistic = 'maxsum';
-        cfg.minnbchan = 0; 
+        cfg.minnbchan = 4; 
         cfg.neighbours = neighbours;
         cfg.tail = 0;
         cfg.alpha = 0.025;
-        cfg.numrandomization = 500;
-        cfg.latency = [50 150]*1e-3 + delay*1e-3; % Set time window to test over
+        cfg.numrandomization = 5000;
+        cfg.latency = [0 200]*1e-3 + delay*1e-3; % Set time window to test over
 
         n_zeros  = size(tl_zeros.trial, 1);
         n_toi = size(tl_data.trial, 1);
 
-        cfg.design = [ones(1,n_zeros), ones(1,n_toi)*2];
+        cfg.design = [ones(1,n_toi), ones(1,n_zeros)*2];
         cfg.ivar = 1;
         cfg.channel = DD.chanlabels(indchantype(DD, 'MEGMAG', 'GOOD'));
         [stat] = ft_timelockstatistics(cfg, tl_data, tl_zeros);
@@ -428,25 +435,33 @@ for recording = 1:size(meta_data,1)
         avg_dat  = ft_timelockanalysis(cfg, data);
         
         % Vector of all p-values associated with the clusters from ft_timelockstatistics.
-        pos_cluster_pvals = [stat.posclusters(:).prob];
-
-        % Which clusters are interesting to visualize
-        pos_clust = find(pos_cluster_pvals < 0.025);
-        pos = ismember(stat.posclusterslabelmat, pos_clust);
+        if isfield(stat, 'posclusters')
+            pos_cluster_pvals = [stat.posclusters(:).prob];
+    
+            % Which clusters are interesting to visualize
+            pos_clust = find(pos_cluster_pvals < 0.025);
+            pos = ismember(stat.posclusterslabelmat, pos_clust);
+        else
+            clear pos
+        end
 
         % Negative clusters
-        neg_cluster_pvals = [stat.negclusters(:).prob];
-        neg_clust = find(neg_cluster_pvals < 0.025);
-        neg = ismember(stat.negclusterslabelmat, neg_clust);
+        if isfield(stat, 'negclusters')
+            neg_cluster_pvals = [stat.negclusters(:).prob];
+            neg_clust = find(neg_cluster_pvals < 0.025);
+            neg = ismember(stat.negclusterslabelmat, neg_clust);
+        else
+            clear neg
+        end
 
-        % Plot topographies at every 10 ms
-        timestep = 0.01; % timestep between time windows for each subplot (in seconds)
+        % Plot topographies at every 50 ms
+        timestep = 0.05; % timestep between time windows for each subplot (in seconds)
         sampling_rate = data.fsample; % Data has a temporal resolution of 300 Hz
         
         % Just select data between 50 and 150 ms
-        tinds = find((stat.time*1e3 >= 50 + delay).*(stat.time*1e3 <= 150 + delay));
+        tinds = find((stat.time*1e3 >= -150 + delay).*(stat.time*1e3 <= 250 + delay));
         sample_count  = length(tinds);
-        j = 50e-3+delay*1e-3:timestep:150e-3+delay*1e-3; % Temporal endpoints (in seconds) of the ERP average computed in each subplot
+        j = -150e-3+delay*1e-3:timestep:250e-3+delay*1e-3; % Temporal endpoints (in seconds) of the ERP average computed in each subplot
         m = tinds(1):timestep*sampling_rate:tinds(end); % temporal endpoints in M/EEG samples
        
         % Get layout
@@ -456,32 +471,45 @@ for recording = 1:size(meta_data,1)
         if isfile(lay_name)
             load(lay_name);
         else
-            fid = fiducials(D);
+            if strcmp(meta_data{recording, "sub"}, 'sub-003')
+                rad_ax = 'Z';
+            else
+                rad_ax = 'Y';
+            end
+
+            fid = fiducials(DD);
             fid_struct = struct('NAS', fid.fid.pnt(contains(fid.fid.label, 'nas'),:), ...
                 'LPA', fid.fid.pnt(contains(fid.fid.label, 'lpa'),:), ...
                 'RPA', fid.fid.pnt(contains(fid.fid.label, 'rpa'),:));
-            lay = spm_get_anatomical_layout(D.sensors('MEG').coilpos(endsWith(D.sensors('MEG').label, ['-', rad_ax]),:), ...
-                D.sensors('MEG').label(endsWith(D.sensors('MEG').label, ['-', rad_ax])),...
-                double(gifti(D.inv{1}.mesh.tess_scalp).vertices), fid_struct, 0);
+            lay = spm_get_anatomical_layout(DD.sensors('MEG').coilpos(endsWith(DD.sensors('MEG').label, ['-', rad_ax]),:), ...
+                DD.sensors('MEG').label(endsWith(DD.sensors('MEG').label, ['-', rad_ax])),...
+                double(gifti(DD.inv{1}.mesh.tess_scalp).vertices), fid_struct, 0);
             save(lay_name, 'lay');
         end
         [i1,i2] = match_str(avg_dat.label, stat.label);
 
         figure;
         for k = 1:length(m)-1
-           subplot(2, 5, k);
+           % subplot(2, 5, k);
+           subplot(3, 3, k);
            cfg = [];
            cfg.xlim = [j(k) j(k+1)];
            cfg.zlim = [-1 1]*465;
 
            pos_int = zeros(numel(avg_dat.label),1);
            neg_int = zeros(numel(avg_dat.label),1);
-           pos_int(i1) = all(pos(i2, m(k):m(k+1)), 2);
-           neg_int(i1) = all(neg(i2, m(k):m(k+1)), 2);
+           if exist('pos', 'var')
+               pos_int(i1) = all(pos(i2, m(k):m(k+1)), 2);
+           end
+           if exist('neg', 'var')
+               neg_int(i1) = all(neg(i2, m(k):m(k+1)), 2);
+           end
 
-           cfg.highlight   = 'on';
-           % Get the index of the to-be-highlighted channel
-           cfg.highlightchannel = find(pos_int | neg_int);
+           if exist('pos_int', 'var') || exist('neg_int', 'var')
+               cfg.highlight   = 'on';
+               % Get the index of the to-be-highlighted channel
+               cfg.highlightchannel = find(pos_int | neg_int);
+           end
            cfg.comment = 'no';
            cfg.layout = lay;
            cfg.interactive = 'no';
@@ -507,8 +535,12 @@ for recording = 1:size(meta_data,1)
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
         end
 
+        if ~(exist(save_loc, 'dir')==7)
+            mkdir(save_loc);
+        end
         save_name = sprintf('%s_anti_averaging_topo_over_time', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
 
         % Plot single topography
         figure;
@@ -519,12 +551,18 @@ for recording = 1:size(meta_data,1)
 
        pos_int = zeros(numel(avg_dat.label),1);
        neg_int = zeros(numel(avg_dat.label),1);
-       pos_int(i1) = any(pos(i2, logical((stat.time*1e3 >= 80 + delay).*(stat.time*1e3 <= 120 + delay))), 2);
-       neg_int(i1) = any(neg(i2, logical((stat.time*1e3 >= 80 + delay).*(stat.time*1e3 <= 120 + delay))), 2);
+       if exist('pos', 'var')
+           pos_int(i1) = any(pos(i2, logical((stat.time*1e3 >= 80 + delay).*(stat.time*1e3 <= 120 + delay))), 2);
+       end
+       if exist('neg', 'var')
+           neg_int(i1) = any(neg(i2, logical((stat.time*1e3 >= 80 + delay).*(stat.time*1e3 <= 120 + delay))), 2);
+       end
 
-       cfg.highlight   = 'on';
-       % Get the index of the to-be-highlighted channel
-       cfg.highlightchannel = find(pos_int | neg_int);
+       if exist('pos_int', 'var') || exist('neg_int', 'var')
+           cfg.highlight   = 'on';
+           % Get the index of the to-be-highlighted channel
+           cfg.highlightchannel = find(pos_int | neg_int);
+       end
        cfg.comment = 'no';
        cfg.layout = lay;
        cfg.interactive = 'no';
@@ -538,7 +576,8 @@ for recording = 1:size(meta_data,1)
        
 
         save_name = sprintf('%s_anti_averaging_topo_80_to_120_ms_anysig', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
 
 
         close all;
@@ -576,7 +615,15 @@ for recording = 1:size(meta_data,1)
 
         % highlight time points where there is at least one significant
         % cluster
-        sigtimes = any(cat(1, pos, neg), 1);
+        if exist('pos', 'var') && exist('neg', 'var')
+            sigtimes = any(cat(1, pos, neg), 1);
+        elseif exist('pos', 'var')
+            sigtimes = pos;
+        elseif exist('neg', 'var')
+            sigtimes = neg;
+        else
+            sigtimes = false(size(stat.time));
+        end
         sigtimes = stat.time(sigtimes)*1e3 - delay;
         if any(sigtimes)
             plot(sigtimes, 0.9*yl(2)*ones(size(sigtimes)), '*', 'color', [59, 142, 165]./255, 'MarkerSize', 5)
@@ -592,7 +639,8 @@ for recording = 1:size(meta_data,1)
         fname = DD.fname;
 
         save_name = sprintf('%s_t_stat_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
 
         % Plot average
         % Create figure
@@ -624,280 +672,263 @@ for recording = 1:size(meta_data,1)
         set(gcf, 'Position', [680   654   451   344]);
         set(gca, 'FontSize', 24);
         save_name = sprintf('%s_average_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
     
     end
     close all;
 
 end
 
-% Plot for colorbar
-figure;
-subplot(1, 1, 1);
-cfg = [];
-cfg.xlim = [80+delay 120+delay]*1e-3;
-cfg.zlim = [-1 1]*250;
-cfg.highlight   = 'on';
-cfg.highlightchannel = find(pos_int | neg_int);
-cfg.comment = 'no';
-cfg.layout = lay;
-cfg.interactive = 'no';
-cfg.figure = 'gca'; 
-cfg.colormap = colormap123;
-cfg.highlightsymbol = '*';
-cfg.markersymbol = '.';
-ft_topoplotER(cfg, avg_dat);
-cb = colorbar('southoutside');
-set(cb, 'FontSize', 22)
-ylabel(cb, 'B (fT)', 'FontSize', 24)
-set(gcf, 'Position', [994   525   404   453]);
 
-print(fullfile(extractBefore(meta_data{end, "results_save_loc"}, 'sub-'), 'anti_averaging_topo_colorbar'),'-dpng','-r300');
-
-%% Dipole fit
-
-clearvars -except meta_data colormap123 delay
-
-rng(76);
-
-for recording = 1:size(meta_data,1)
-    cd(meta_data{recording, "analysed_data_loc"});
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'}; 
-    for pp = 1:length(start_string)
-        DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
-            strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
-    end
-
-    % Get deviant and standard labels
-    stim = readtable(meta_data{recording, "stim_data_fname"});
-    deviants = find(contains(stim.Condition, 'deviant'));
-    trial_length = diff(deviants);
-    trial_length = cat(1, trial_length, size(DD{pp},3) - max(deviants) + 1);
-
-    % Take last tone of each set as standard
-    standards = deviants(2:end)-1;
-    standards = cat(1, standards, size(DD{pp},3));
-    
-    % Dipole fit
-
-    % Initialise at auditory cortices
-    aud_mni = [-54 -14 8 1; 54 -14 8 1]'; % Auditory cortices in MNI space
-    aud_nat = DD{1}.inv{1}.datareg.fromMNI*aud_mni;
-    aud_nat = aud_nat(1:3,:)';
-    aud_nat = aud_nat*1e-3; % convert to m
-
-    % Prepare headmodel
-    mesh = ft_read_headshape(DD{1}.inv{1}.mesh.tess_iskull);
-    cfg = [];
-    cfg.method = 'singleshell';
-    cfg.siunits = 'yes';
-    headmodel = ft_prepare_headmodel(cfg, mesh);
-
-    % Cortex
-    ctx = ft_read_headshape(DD{1}.inv{1}.mesh.tess_ctx);
-    ctx = ft_convert_units(ctx, 'm');
-
-    % Prepare sourcemodel - use cortical mesh
-    cfg = [];
-    cfg.method = 'basedoncortex';
-    cfg.headshape = ctx;
-    cfg.headmodel = headmodel;
-    cfg.inwardshift = 0;
-    src = ft_prepare_sourcemodel(cfg);
-    
-
-    % Read MRI for plotting
-    mri_orig = ft_read_mri(DD{1}.inv{1}.mesh.sMRI);
-
-    for pp = 1:length(DD)
-
-        % Prepare leadfields
-        sens = DD{pp}.sensors('MEG');
-        sens = ft_convert_units(sens, 'm');
-        cfg                  = [];
-        cfg.grad             = sens;
-        cfg.headmodel        = headmodel;
-        cfg.reducerank       = 2;
-        cfg.channel          = DD{4}.chanlabels(indchantype(DD{pp}, 'MEGMAG', 'GOOD'));
-        cfg.sourcemodel      = src;
-        sourcemodel = ft_prepare_leadfield(cfg);
-
-        % Format data for fieldtrip
-        data = ftraw(DD{pp});
-        cfg = [];
-        cfg.trials = indtrial(DD{pp}, 'tone', 'GOOD');
-        data = ft_selectdata(cfg, data);
-
-        % Average
-        tl_data = ft_timelockanalysis([], data);
-
-        % Dipole fit
-        cfg = [];
-        cfg.latency = [0.08 0.12]+delay*1e-3;
-        cfg.numdipoles = 2;
-        cfg.symmetry = [];
-        cfg.gridsearch = 'no';
-        cfg.dip.pos = aud_nat;
-        cfg.headmodel = headmodel;
-        cfg.sourcemodel = sourcemodel;
-        cfg.channel = DD{pp}.chanlabels(indchantype(DD{pp}, 'MEGMAG', 'GOOD'));
-        cfg.senstype = 'meg';
-        source = ft_dipolefitting(cfg, tl_data);
-        source.dip = ft_convert_units(source.dip, 'mm');
-
-        % Plot dipole position
-        if pp == 1
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
-        elseif pp == 2
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
-        elseif pp == 3
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
-        elseif pp == 4
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
-        else
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-        end
-
-        % Axial
-        pos = mean(source.dip.pos,1);
-        figure; hold on;
-        ft_plot_dipole([source.dip.pos(1,[1,2]), pos(3)+150], mean(source.dip.mom(1:3,:),2), 'color', '#E07BE0', 'unit', 'mm'); % Left
-        ft_plot_dipole([source.dip.pos(2,[1,2]), pos(3)+150], mean(source.dip.mom(4:6,:),2), 'color', '#45C9B7', 'unit', 'mm'); % Right
-        ft_plot_slice(mri_orig.anatomy, 'transform', mri_orig.transform, 'location', pos, 'orientation', [0 0 1], 'resolution', 0.1);
-        view(0,90);
-        axis tight
-        axis off
-        set(gcf, 'Position', [680    50   560   946]);
-        save_name = sprintf('%s_ft_dip_fit_axial', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-
-        % Coronal
-        figure; hold on;
-        ft_plot_dipole([source.dip.pos(1,1), pos(2)-100, source.dip.pos(1,3)], mean(source.dip.mom(1:3,:),2), 'color', '#E07BE0', 'unit', 'mm'); % Left
-        ft_plot_dipole([source.dip.pos(2,1), pos(2)-150, source.dip.pos(2,3)], mean(source.dip.mom(4:6,:),2), 'color', '#45C9B7', 'unit', 'mm'); % Right
-        ft_plot_slice(mri_orig.anatomy, 'transform', mri_orig.transform, 'location', pos, 'orientation', [0 1 0], 'resolution', 0.1);
-        view(0,0);
-        axis tight
-        axis off
-        set(gcf, 'Position', [680    50   560   946]);
-        save_name = sprintf('%s_ft_dip_fit_coronal', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-        
-
-        % Plot estimated source current
-        % Get lead field along mean dipole ori
-        sens = data.grad;
-        sens = ft_convert_units(sens, 'm');
-        [headmodel, sens] = ft_prepare_vol_sens(headmodel, sens, 'channel', DD{pp}.chanlabels(indchantype(DD{pp}, 'MEGMAG', 'GOOD')));
-        Gxyz = ft_compute_leadfield(source.dip.pos*1e-3, sens, headmodel, 'dipoleunit', 'nA*m', 'chanunit', repmat({'fT'}, size(sens.label,1),1));
-        L = zeros(size(Gxyz,1),2);
-        for ind = 1:2
-            dip_ori = mean(source.dip.mom((ind-1)*3+1:ind*3,:),2);
-            dip_ori = dip_ori./norm(dip_ori);
-            L(:, ind) = Gxyz(:, (3*ind-2):(3*ind))*dip_ori;
-        end
-
-        good_trials = indtrial(DD{pp}, 'tone', 'GOOD');
-        X_evoked = zeros(size(L,2), size(DD{pp},2), length(good_trials));
-        X_standards = zeros(size(L,2), size(DD{pp},2), length(standards));
-        X_deviants = zeros(size(L,2), size(DD{pp},2), length(deviants));
-
-        for tt = 1:length(good_trials)
-            X_evoked(:,:,tt) = pinv(L)*DD{pp}(indchannel(DD{pp},sens.label),:,good_trials(tt));
-        end
-        for tt = 1:length(deviants)
-            X_deviants(:,:,tt) = pinv(L)*DD{pp}(indchannel(DD{pp},sens.label),:,deviants(tt));
-        end
-        for tt = 1:length(standards)
-            X_standards(:,:,tt) = pinv(L)*DD{pp}(indchannel(DD{pp},sens.label),:,standards(tt));
-        end
-
-        % T-test across trials
-        SE_evoked = std(X_evoked, [], 3)./sqrt(size(X_evoked,3));
-        t_evoked = mean(X_evoked, 3)./SE_evoked;
-        SE_standards = std(X_standards, [], 3)./sqrt(size(X_standards, 3));
-        t_standards = mean(X_standards,3)./SE_standards;
-        SE_deviants = std(X_deviants, [], 3)./sqrt(size(X_deviants, 3));
-        t_deviants = mean(X_deviants,3)./SE_deviants;
-        
-        % Unpaired t-test equal variance between deviants and standards for MMN response
-        n1 = size(X_deviants,3);
-        n2 = size(X_standards,3);
-        SE = sqrt(((n1-1)*std(X_deviants, [], 3).^2 + (n2-1)*std(X_standards, [], 3).^2)./(n1 + n2 - 2))*...
-            sqrt(1/n1 + 1/n2);
-        t_diff = (mean(X_deviants,3) - mean(X_standards,3))./SE;
-
-
-        % Plot
-        % Evoked response:
-        figure;
-        hold on; grid on; box on;
-        ylim([-1 1]*7);
-        yl = ylim;
-        fill([min(cfg.latency), max(cfg.latency), max(cfg.latency), min(cfg.latency)]*1e3 - delay, ...
-            [yl(1), yl(1), yl(2), yl(2)], [231, 196, 170]./255, 'EdgeColor', 'None', 'FaceAlpha', 0.3);
-        plot(DD{pp}.time*1e3 - delay, t_standards, 'LineWidth', 3, 'LineStyle', '-');
-        colororder(gca, ["#E07BE0", "#45C9B7"]);
-        set(gca, 'FontSize', 18);
-        xlim([-100 400]);
-        xlabel('Time (ms)', 'FontSize', 18);
-        % ylabel({'Estimated Source', 'Current (nAm)'}, 'FontSize', 18);
-        ylabel('t-stat', 'FontSize', 18);
-        set(gcf, 'Position', [680   654   451   344]);
-        save_name = sprintf('%s_dipfit_evoked_dipole', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-
-        % MMN:
-        figure; 
-        t = tiledlayout(1,2);
-        yl = [];
-        for ind = 1:2
-            nexttile(t); hold on; grid on; box on;
-
-            % Standards
-            % plot(DD{pp}.time*1e3 - delay, mean(X_standards(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
-            plot(DD{pp}.time*1e3 - delay, t_standards(ind,:), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
-
-            % Deviants
-            % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
-            plot(DD{pp}.time*1e3 - delay, t_deviants(ind,:), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
-
-            % Difference
-            % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(ind,:,:),3) - mean(X_standards(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
-            plot(DD{pp}.time*1e3 - delay, t_diff(ind,:), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
-            set(gca, 'FontSize', 18);
-            xlim([-100 400]);
-            % yl(ind) = max(abs(ylim));
-            xlabel('Time (ms)');
-
-            if ind == 1
-                title('Left Hemisphere');
-            else
-                title('Right Hemisphere');
-            end
-
-        end
-
-        % Set axes limits and legend
-        % ylim(t.Children, [-1 1]*max(abs(yl)));
-        ylim(t.Children, [-1 1]*10);
-        % ylabel(t, {'Estimated Source', 'Current (nAm)'}, 'FontSize', 18);
-        ylabel(t, 't-stat', 'FontSize', 18);
-        lgd = legend('Standards', 'Deviants', 'MMN', 'location', 'eastoutside');
-        set(gcf, 'Position', [626   476   821   285]);
-
-        % Add text to indicate how many trials per condition
-        
-        annotation('textbox', [lgd.Position(1), lgd.Position(2) - 0.35, lgd.Position(3), 0.3], ...
-            'string', sprintf('# deviants: %.f\n# standards: %.f', length(deviants), length(standards)), 'FontSize', 16, 'EdgeColor', 'None');
-
-        save_name = sprintf('%s_dipfit_MMN_trace_dipole_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-        
-    end
-
-    close all
-end
+% %% Dipole fit
+% 
+% clearvars -except meta_data colormap123 delay
+% 
+% rng(76);
+% 
+% for recording = 1:size(meta_data,1)
+%     cd(meta_data{recording, "analysed_data_loc"});
+%     start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'}; 
+%     for pp = 1:length(start_string)
+%         DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
+%             strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
+%     end
+% 
+%     % Get deviant and standard labels
+%     stim = readtable(meta_data{recording, "stim_data_fname"});
+%     deviants = find(contains(stim.Condition, 'deviant'));
+%     trial_length = diff(deviants);
+%     trial_length = cat(1, trial_length, size(DD{pp},3) - max(deviants) + 1);
+% 
+%     % Take last tone of each set as standard
+%     standards = deviants(2:end)-1;
+%     standards = cat(1, standards, size(DD{pp},3));
+% 
+%     % Dipole fit
+% 
+%     % Initialise at auditory cortices
+%     aud_mni = [-54 -14 8 1; 54 -14 8 1]'; % Auditory cortices in MNI space
+%     aud_nat = DD{1}.inv{1}.datareg.fromMNI*aud_mni;
+%     aud_nat = aud_nat(1:3,:)';
+%     aud_nat = aud_nat*1e-3; % convert to m
+% 
+%     % Prepare headmodel
+%     mesh = ft_read_headshape(DD{1}.inv{1}.mesh.tess_iskull);
+%     cfg = [];
+%     cfg.method = 'singleshell';
+%     cfg.siunits = 'yes';
+%     headmodel = ft_prepare_headmodel(cfg, mesh);
+% 
+%     % Cortex
+%     ctx = ft_read_headshape(DD{1}.inv{1}.mesh.tess_ctx);
+%     ctx = ft_convert_units(ctx, 'm');
+% 
+%     % Prepare sourcemodel - use cortical mesh
+%     cfg = [];
+%     cfg.method = 'basedoncortex';
+%     cfg.headshape = ctx;
+%     cfg.headmodel = headmodel;
+%     cfg.inwardshift = 0;
+%     src = ft_prepare_sourcemodel(cfg);
+% 
+% 
+%     % Read MRI for plotting
+%     mri_orig = ft_read_mri(DD{1}.inv{1}.mesh.sMRI);
+% 
+%     for pp = 1:length(DD)
+% 
+%         % Prepare leadfields
+%         sens = DD{pp}.sensors('MEG');
+%         sens = ft_convert_units(sens, 'm');
+%         cfg                  = [];
+%         cfg.grad             = sens;
+%         cfg.headmodel        = headmodel;
+%         cfg.reducerank       = 2;
+%         cfg.channel          = DD{4}.chanlabels(indchantype(DD{pp}, 'MEGMAG', 'GOOD'));
+%         cfg.sourcemodel      = src;
+%         sourcemodel = ft_prepare_leadfield(cfg);
+% 
+%         % Format data for fieldtrip
+%         data = ftraw(DD{pp});
+%         cfg = [];
+%         cfg.trials = indtrial(DD{pp}, 'tone', 'GOOD');
+%         data = ft_selectdata(cfg, data);
+% 
+%         % Average
+%         tl_data = ft_timelockanalysis([], data);
+% 
+%         % Dipole fit
+%         cfg = [];
+%         cfg.latency = [0.08 0.12]+delay*1e-3;
+%         cfg.numdipoles = 2;
+%         cfg.symmetry = [];
+%         cfg.gridsearch = 'no';
+%         cfg.dip.pos = aud_nat;
+%         cfg.headmodel = headmodel;
+%         cfg.sourcemodel = sourcemodel;
+%         cfg.channel = DD{pp}.chanlabels(indchantype(DD{pp}, 'MEGMAG', 'GOOD'));
+%         cfg.senstype = 'meg';
+%         source = ft_dipolefitting(cfg, tl_data);
+%         source.dip = ft_convert_units(source.dip, 'mm');
+% 
+%         % Plot dipole position
+%         if pp == 1
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
+%         elseif pp == 2
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
+%         elseif pp == 3
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+%         elseif pp == 4
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
+%         else
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
+%         end
+% 
+%         % Axial
+%         pos = mean(source.dip.pos,1);
+%         figure; hold on;
+%         ft_plot_dipole([source.dip.pos(1,[1,2]), pos(3)+150], mean(source.dip.mom(1:3,:),2), 'color', '#E07BE0', 'unit', 'mm'); % Left
+%         ft_plot_dipole([source.dip.pos(2,[1,2]), pos(3)+150], mean(source.dip.mom(4:6,:),2), 'color', '#45C9B7', 'unit', 'mm'); % Right
+%         ft_plot_slice(mri_orig.anatomy, 'transform', mri_orig.transform, 'location', pos, 'orientation', [0 0 1], 'resolution', 0.1);
+%         view(0,90);
+%         axis tight
+%         axis off
+%         set(gcf, 'Position', [680    50   560   946]);
+%         save_name = sprintf('%s_ft_dip_fit_axial', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%         % Coronal
+%         figure; hold on;
+%         ft_plot_dipole([source.dip.pos(1,1), pos(2)-100, source.dip.pos(1,3)], mean(source.dip.mom(1:3,:),2), 'color', '#E07BE0', 'unit', 'mm'); % Left
+%         ft_plot_dipole([source.dip.pos(2,1), pos(2)-150, source.dip.pos(2,3)], mean(source.dip.mom(4:6,:),2), 'color', '#45C9B7', 'unit', 'mm'); % Right
+%         ft_plot_slice(mri_orig.anatomy, 'transform', mri_orig.transform, 'location', pos, 'orientation', [0 1 0], 'resolution', 0.1);
+%         view(0,0);
+%         axis tight
+%         axis off
+%         set(gcf, 'Position', [680    50   560   946]);
+%         save_name = sprintf('%s_ft_dip_fit_coronal', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+% 
+%         % Plot estimated source current
+%         % Get lead field along mean dipole ori
+%         sens = data.grad;
+%         sens = ft_convert_units(sens, 'm');
+%         [headmodel, sens] = ft_prepare_vol_sens(headmodel, sens, 'channel', DD{pp}.chanlabels(indchantype(DD{pp}, 'MEGMAG', 'GOOD')));
+%         Gxyz = ft_compute_leadfield(source.dip.pos*1e-3, sens, headmodel, 'dipoleunit', 'nA*m', 'chanunit', repmat({'fT'}, size(sens.label,1),1));
+%         L = zeros(size(Gxyz,1),2);
+%         for ind = 1:2
+%             dip_ori = mean(source.dip.mom((ind-1)*3+1:ind*3,:),2);
+%             dip_ori = dip_ori./norm(dip_ori);
+%             L(:, ind) = Gxyz(:, (3*ind-2):(3*ind))*dip_ori;
+%         end
+% 
+%         good_trials = indtrial(DD{pp}, 'tone', 'GOOD');
+%         X_evoked = zeros(size(L,2), size(DD{pp},2), length(good_trials));
+%         X_standards = zeros(size(L,2), size(DD{pp},2), length(standards));
+%         X_deviants = zeros(size(L,2), size(DD{pp},2), length(deviants));
+% 
+%         for tt = 1:length(good_trials)
+%             X_evoked(:,:,tt) = pinv(L)*DD{pp}(indchannel(DD{pp},sens.label),:,good_trials(tt));
+%         end
+%         for tt = 1:length(deviants)
+%             X_deviants(:,:,tt) = pinv(L)*DD{pp}(indchannel(DD{pp},sens.label),:,deviants(tt));
+%         end
+%         for tt = 1:length(standards)
+%             X_standards(:,:,tt) = pinv(L)*DD{pp}(indchannel(DD{pp},sens.label),:,standards(tt));
+%         end
+% 
+%         % T-test across trials
+%         SE_evoked = std(X_evoked, [], 3)./sqrt(size(X_evoked,3));
+%         t_evoked = mean(X_evoked, 3)./SE_evoked;
+%         SE_standards = std(X_standards, [], 3)./sqrt(size(X_standards, 3));
+%         t_standards = mean(X_standards,3)./SE_standards;
+%         SE_deviants = std(X_deviants, [], 3)./sqrt(size(X_deviants, 3));
+%         t_deviants = mean(X_deviants,3)./SE_deviants;
+% 
+%         % Unpaired t-test equal variance between deviants and standards for MMN response
+%         n1 = size(X_deviants,3);
+%         n2 = size(X_standards,3);
+%         SE = sqrt(((n1-1)*std(X_deviants, [], 3).^2 + (n2-1)*std(X_standards, [], 3).^2)./(n1 + n2 - 2))*...
+%             sqrt(1/n1 + 1/n2);
+%         t_diff = (mean(X_deviants,3) - mean(X_standards,3))./SE;
+% 
+% 
+%         % Plot
+%         % Evoked response:
+%         figure;
+%         hold on; grid on; box on;
+%         ylim([-1 1]*7);
+%         yl = ylim;
+%         fill([min(cfg.latency), max(cfg.latency), max(cfg.latency), min(cfg.latency)]*1e3 - delay, ...
+%             [yl(1), yl(1), yl(2), yl(2)], [231, 196, 170]./255, 'EdgeColor', 'None', 'FaceAlpha', 0.3);
+%         plot(DD{pp}.time*1e3 - delay, t_standards, 'LineWidth', 3, 'LineStyle', '-');
+%         colororder(gca, ["#E07BE0", "#45C9B7"]);
+%         set(gca, 'FontSize', 18);
+%         xlim([-100 400]);
+%         xlabel('Time (ms)', 'FontSize', 18);
+%         % ylabel({'Estimated Source', 'Current (nAm)'}, 'FontSize', 18);
+%         ylabel('t-stat', 'FontSize', 18);
+%         set(gcf, 'Position', [680   654   451   344]);
+%         save_name = sprintf('%s_dipfit_evoked_dipole', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%         % MMN:
+%         figure; 
+%         t = tiledlayout(1,2);
+%         yl = [];
+%         for ind = 1:2
+%             nexttile(t); hold on; grid on; box on;
+% 
+%             % Standards
+%             % plot(DD{pp}.time*1e3 - delay, mean(X_standards(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
+%             plot(DD{pp}.time*1e3 - delay, t_standards(ind,:), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
+% 
+%             % Deviants
+%             % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
+%             plot(DD{pp}.time*1e3 - delay, t_deviants(ind,:), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
+% 
+%             % Difference
+%             % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(ind,:,:),3) - mean(X_standards(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
+%             plot(DD{pp}.time*1e3 - delay, t_diff(ind,:), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
+%             set(gca, 'FontSize', 18);
+%             xlim([-100 400]);
+%             % yl(ind) = max(abs(ylim));
+%             xlabel('Time (ms)');
+% 
+%             if ind == 1
+%                 title('Left Hemisphere');
+%             else
+%                 title('Right Hemisphere');
+%             end
+% 
+%         end
+% 
+%         % Set axes limits and legend
+%         % ylim(t.Children, [-1 1]*max(abs(yl)));
+%         ylim(t.Children, [-1 1]*10);
+%         % ylabel(t, {'Estimated Source', 'Current (nAm)'}, 'FontSize', 18);
+%         ylabel(t, 't-stat', 'FontSize', 18);
+%         lgd = legend('Standards', 'Deviants', 'MMN', 'location', 'eastoutside');
+%         set(gcf, 'Position', [626   476   821   285]);
+% 
+%         % Add text to indicate how many trials per condition
+% 
+%         annotation('textbox', [lgd.Position(1), lgd.Position(2) - 0.35, lgd.Position(3), 0.3], ...
+%             'string', sprintf('# deviants: %.f\n# standards: %.f', length(deviants), length(standards)), 'FontSize', 16, 'EdgeColor', 'None');
+% 
+%         save_name = sprintf('%s_dipfit_MMN_trace_dipole_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%     end
+% 
+%     close all
+% end
 
 %% Minimum Norm Estimation
 
@@ -1020,7 +1051,7 @@ for recording = 1:size(meta_data,1)
         end
 
         % Save
-        view ([-90 5])             % rotate the object in the view
+        view ([-90 0])             % rotate the object in the view
         cl1 = camlight('headlight');
         set(gcf, 'color', 'w');
         set(gca, 'FontSize', 26);
@@ -1039,7 +1070,8 @@ for recording = 1:size(meta_data,1)
         end
     
         save_name = sprintf('%s_min_norm_pow_left', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
 
         % Right hemisphere
         r_source_data_toi = [];
@@ -1087,7 +1119,167 @@ for recording = 1:size(meta_data,1)
         material dull
     
         save_name = sprintf('%s_min_norm_pow_right', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
+
+    end
+    close all
+end
+
+%% Correlated sources beamformer
+
+clearvars -except meta_data colormap123 delay
+
+max_vals = zeros(size(meta_data,1), 5);
+
+
+for recording = 1:size(meta_data,1)
+
+    fprintf('Recording no: %.f of %.f\n', recording, size(meta_data,1));
+
+     if ~isfile(fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
+        'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})))
+        inflated_ctx_fname = fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
+                'anat', sprintf('%s.L.inflated.4k_fs_LR.surf.gii', meta_data{recording, 'sub'}));
+        combine_surfaces({inflated_ctx_fname, strrep(inflated_ctx_fname, '.L.', '.R.')}, ...
+            fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
+            'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})));
+    end
+
+    inflated_ctx = ft_read_headshape(fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
+                'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})));
+
+    % Get data
+    cd(meta_data{recording, "analysed_data_loc"});
+    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'}; 
+    for pp = [length(start_string), 1:length(start_string)-1]
+        DD = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
+            strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
+
+        % Source reconstruct
+        % data
+        S = [];
+        S.D = DD;
+        bf_wizard_data(S);
+
+        % Sources
+        S = [];
+        S.BF = 'BF.mat';
+        S.reduce_rank = [2 3];
+        S.method = 'mesh'; 
+        S.mesh.orient = 'unoriented';
+        bf_wizard_sources(S);
+
+        % Update the sources for bilateral lcmv beamformer
+        BF = load('BF.mat');
+        BF.sources.paired_idx(1:round(size(BF.sources.pos,1)/2)) = (1:round(size(BF.sources.pos,1)/2)) + round(size(BF.sources.pos,1)/2);
+        BF.sources.paired_idx(round(size(BF.sources.pos,1)/2)+1:size(BF.sources.pos,1)) = 1:round(size(BF.sources.pos,1)/2);
+        save('BF.mat', '-struct', 'BF')
+
+        % Features
+        S = [];
+        S.conditions = {'tone'};
+        S.BF = 'BF.mat';
+        S.method = 'cov';
+        S.cov.foi = [2 40];
+        S.reg = 'mantrunc';
+        S.(S.reg).pcadim = 70;
+        S.visualise = 1;
+        bf_wizard_features(S);
+
+        % Inverse
+        S = [];
+        S.BF = 'BF.mat';
+        S.method = 'lcmv';
+        bf_wizard_inverse(S);cs
+
+        % Output
+        S = [];
+        S.BF = 'BF.mat';
+        S.conditions = {'tone'};
+        S.method = 'image_power';
+        S.('image_power').woi = [50 150; -150 -50];
+        S.('image_power').contrast = [1 -1];
+        S.('image_power').foi = [2 40];
+        S.('image_power').logpower = true; % Step towards getting in dB, but N.B. this does ln(P1/P2), so need to change to 10*log10(P1/P2) when plotting later
+        bf_wizard_output(S);
+
+        % Write
+        S = [];
+        S.BF = 'BF.mat';
+        S.method = 'gifti';
+        S.('nifti').space = 'native';
+        bf_wizard_write(S);
+
+        if pp == 1
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
+        elseif pp == 2
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
+        elseif pp == 3
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+        elseif pp == 4
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
+        else
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
+        end
+
+        movefile(['uv_pow_', strrep(DD.fname, '.mat', '.gii')], save_loc);
+
+        BF = load('BF.mat');
+
+        lcmv_output = [];
+        lcmv_output.pos = inflated_ctx.pos;
+        lcmv_output.inside = ones(size(lcmv_output.pos,1), 1)==1;
+        lcmv_output.pow = BF.output.image.val;
+        lcmv_output.tri = inflated_ctx.tri;
+        
+        maxval = max(lcmv_output.pow);
+        max_vals(recording,pp) = maxval;
+        maxval = max_vals(recording,end);
+        lcmv_output.mask = lcmv_output.pow >= 0.5*maxval;        
+
+        cfg                     = [];
+        cfg.method              = 'surface';
+        cfg.facecolor           = [0.4 0.4 0.4];
+        cfg.vertexcolor         = 'none';
+        cfg.funparameter        = 'pow';
+        cfg.location            = 'max';
+        cfg.maskparameter       = 'mask';
+        if any(lcmv_output.mask)
+            cfg.funcolorlim         = [0 maxval];
+            ft_sourceplot(cfg, lcmv_output);
+            colormap('hot') % change the colormap
+        else
+            figure;
+            surf.pos = inflated_ctx.pos;
+            surf.tri = inflated_ctx.tri;
+            ft_plot_mesh(surf,'edgecolor', 'none', 'facecolor', cfg.facecolor, 'vertexcolor', cfg.vertexcolor);
+            lighting gouraud
+            camlight
+        end
+
+        % Save
+        view ([-90 0])             % rotate the object in the view
+        cl1 = camlight('headlight');
+        set(gcf, 'color', 'w');
+        set(gca, 'FontSize', 26);
+        material dull
+    
+        if pp == 1
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
+        elseif pp == 2
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
+        elseif pp == 3
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+        elseif pp == 4
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
+        else
+            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
+        end
+    
+        save_name = sprintf('%s_dual_source_lcmv_pow', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
 
     end
     close all
@@ -1165,709 +1357,411 @@ for recording = 1:size(meta_data,1)
             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
         end
 
-        save_name = sprintf('%s_ROI_dipole', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        save_name = sprintf('%s_ROI', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
     end
     close all
 end
 
-%% Fieldtrip dipole fit to plot evoked response, standards and deviants at source level
-
-clearvars -except meta_data colormap123 delay
-
-rng(76);
-
-for recording = 1:size(meta_data,1)
-    cd(meta_data{recording, "analysed_data_loc"});
-    start_string = {'be_ffft_', 'be_hffft_', 'be_m2ffft_', 'be_mffft_'}; %'be_h2ffft_', 
-    for pp = 1:length(start_string)
-        DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
-            strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
-    end
-
-    % Get deviant and standard labels
-    stim = readtable(meta_data{recording, "stim_data_fname"});
-    deviants = find(contains(stim.Condition, 'deviant'));
-    trial_length = diff(deviants);
-    trial_length = cat(1, trial_length, size(DD{pp},3) - max(deviants) + 1);
-
-    % Take last tone of each set as standard
-    standards = deviants(2:end)-1;
-    standards = cat(1, standards, size(DD{pp},3));
-    
-    % Dipole fit based on AMM results
-    ctx = gifti(DD{4}.inv{1}.mesh.tess_ctx);
-
-    % Find initialisation positions
-    linds = 1:size(ctx.vertices,1)/2;
-    rinds = size(ctx.vertices,1)/2+1:size(ctx.vertices,1);
-    [~, maxind_l] = max(DD{4}.inv{1}.contrast.GW{1}(linds));
-    [~, maxind_r] = max(DD{4}.inv{1}.contrast.GW{1}(rinds));
-    maxind_l = linds(maxind_l);
-    maxind_r = rinds(maxind_r);
-
-    % Format data for fieldtrip
-    data = ftraw(DD{4});
-    cfg = [];
-    cfg.trials = indtrial(DD{4}, 'tone', 'GOOD');
-    data = ft_selectdata(cfg, data);
-
-    % Average
-    tl_data = ft_timelockanalysis([], data);
-
-    % Prepare headmodel
-    mesh = ft_read_headshape(DD{4}.inv{1}.mesh.tess_iskull);
-    cfg = [];
-    cfg.method = 'singleshell';
-    headmodel = ft_prepare_headmodel(cfg, mesh);
-
-    % Prepare sourcemodel - use cortical mesh
-    cfg = [];
-    cfg.method = 'basedoncortex';
-    cfg.headshape = ft_read_headshape(DD{4}.inv{1}.mesh.tess_ctx);
-    cfg.headmodel = headmodel;
-    cfg.inwardshift = 0;
-    sourcemodel = ft_prepare_sourcemodel(cfg);
-
-    % Prepare leadfields
-    cfg                  = [];
-    cfg.grad             = data.grad;
-    cfg.headmodel        = headmodel;
-    cfg.reducerank       = 2;
-    cfg.channel          = DD{4}.chanlabels(indchantype(DD{pp}, 'MEGMAG', 'GOOD'));
-    cfg.sourcemodel = sourcemodel;
-    sourcemodel = ft_prepare_leadfield(cfg);
-
-    % Dipole fit
-    cfg = [];
-    cfg.latency = [0.08 0.12]+delay*1e-3;
-    cfg.numdipoles = 2;
-    cfg.symmetry = [];
-    cfg.gridsearch = 'no';
-    cfg.dip.pos = double(ctx.vertices([maxind_l, maxind_r], :));
-    cfg.headmodel = headmodel;
-    cfg.sourcemodel = sourcemodel;
-    cfg.channel = DD{4}.chanlabels(indchantype(DD{4}, 'MEGMAG', 'GOOD'));
-    cfg.senstype = 'meg';
-    source = ft_dipolefitting(cfg, tl_data);
-
-    % Plot dipole position
-    figure; hold on;
-    trisurf(sourcemodel.tri, sourcemodel.pos(:,1), sourcemodel.pos(:,2), sourcemodel.pos(:,3), 'FaceColor', [0.4 0.4 0.4], 'FaceAlpha', 0.3, 'EdgeColor', 'None');
-    daspect([1 1 1])
-    ft_plot_dipole(source.dip.pos(1,:), mean(source.dip.mom(1:3,:),2), 'color', 'b', 'unit', 'mm')
-    ft_plot_dipole(source.dip.pos(2,:), mean(source.dip.mom(4:6,:),2), 'color', 'b', 'unit', 'mm')
-    set(gcf, 'Position', [-1380, 320, 560, 420]);
-
-    view(-90,0);
-    save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-
-    save_name = sprintf('%s_ft_dip_fit_left', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-    print(fullfile(save_loc, save_name),'-dpng','-r300');
-
-    view([90 0]);
-
-    save_name = sprintf('%s_ft_dip_fit_right', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-    print(fullfile(save_loc, save_name),'-dpng','-r300');
-
-    
-    % combined plot for supplementary material
-    % Left
-    fig_left = figure;
-    subplot(5, 4, 1:12);
-    trisurf(sourcemodel.tri, sourcemodel.pos(:,1), sourcemodel.pos(:,2), sourcemodel.pos(:,3), 'FaceColor', [0.4 0.4 0.4], 'FaceAlpha', 0.3, 'EdgeColor', 'None');
-    daspect([1 1 1])
-    ft_plot_dipole(source.dip.pos(1,:), mean(source.dip.mom(1:3,:),2), 'color', 'b', 'unit', 'mm')
-    view(-90,0);
-    axs_left = gobjects(1,4);
-
-    % Right
-    fig_right = figure;
-    subplot(5, 4, 1:12);
-    trisurf(sourcemodel.tri, sourcemodel.pos(:,1), sourcemodel.pos(:,2), sourcemodel.pos(:,3), 'FaceColor', [0.4 0.4 0.4], 'FaceAlpha', 0.3, 'EdgeColor', 'None');
-    daspect([1 1 1])
-    ft_plot_dipole(source.dip.pos(2,:), mean(source.dip.mom(4:6,:),2), 'color', 'b', 'unit', 'mm')
-    view([90 0]);
-    axs_right = gobjects(1,4);
-
-    % Find cortex point
-    for ind = 1:2
-        [~, sourceind(ind)] = min(sqrt(sum((ctx.vertices - source.dip.pos(ind,:)).^2, 2)));
-    end
-    sourceind = sort(sourceind);
-
-    % Plot estimated source current for each preprocessing step
-    for pp = 1:length(DD)
-
-        L = full(spm_eeg_lgainmat(DD{pp},sourceind));
-
-        good_trials = indtrial(DD{pp}, 'tone', 'GOOD');
-        X_evoked = zeros(size(L,2), size(DD{pp},2), length(good_trials));
-        X_standards = zeros(size(L,2), size(DD{pp},2), length(standards));
-        X_deviants = zeros(size(L,2), size(DD{pp},2), length(deviants));
-
-        for tt = 1:length(good_trials)
-            X_evoked(:,:,tt) = pinv(L)*DD{pp}(indchantype(DD{pp},'MEGMAG','GOOD'),:,good_trials(tt));
-        end
-        for tt = 1:length(deviants)
-            X_deviants(:,:,tt) = pinv(L)*DD{pp}(indchantype(DD{pp},'MEGMAG','GOOD'),:,deviants(tt));
-        end
-        for tt = 1:length(standards)
-            X_standards(:,:,tt) = pinv(L)*DD{pp}(indchantype(DD{pp},'MEGMAG','GOOD'),:,standards(tt));
-        end
-
-        % T-test across trials
-        SE_evoked = std(X_evoked, [], 3)./sqrt(size(X_evoked,3));
-        t_evoked = mean(X_evoked, 3)./SE_evoked;
-        SE_standards = std(X_standards, [], 3)./sqrt(size(X_standards, 3));
-        t_standards = mean(X_standards,3)./SE_standards;
-        SE_deviants = std(X_deviants, [], 3)./sqrt(size(X_deviants, 3));
-        t_deviants = mean(X_deviants,3)./SE_deviants;
-        
-        % Unpaired t-test equal variance between deviants and standards for MMN response
-        n1 = size(X_deviants,3);
-        n2 = size(X_standards,3);
-        SE = sqrt(((n1-1)*std(X_deviants, [], 3).^2 + (n2-1)*std(X_standards, [], 3).^2)./(n1 + n2 - 2))*...
-            sqrt(1/n1 + 1/n2);
-        t_diff = (mean(X_deviants,3) - mean(X_standards,3))./SE;
-
-
-        % Evoked response:
-        figure; 
-        t = tiledlayout(1,2);
-        yl = [];
-        for ind = 1:2
-            nexttile(t); hold on; grid on; box on;
-
-            % plot(DD{pp}.time*1e3 - delay, mean(X_evoked(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', 'k');
-            plot(DD{pp}.time*1e3 - delay, t_standards(ind,:), 'LineWidth', 3, 'LineStyle', '-', 'color', 'k');
-
-            set(gca, 'FontSize', 18);
-            xlim([-100 400]);
-            yl(ind) = max(abs(ylim));
-            xlabel('Time (ms)');
-
-            if ind == 1
-                title('Left Hemisphere');
-            else
-                title('Right Hemisphere');
-            end
-
-        end
-
-        % Set axes limits and legend
-        % ylim(t.Children, [-1 1]*max(abs(yl)));
-        ylim(t.Children, [-1 1]*7);
-        % ylabel(t, {'Estimated Source', 'Current (nAm)'}, 'FontSize', 18);
-        ylabel(t, 't-stat', 'FontSize', 18);
-        legend('Standards', 'location', 'eastoutside');
-        set(gcf, 'Position', [626   476   821   285]);
-
-        if pp == 1
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
-        elseif pp == 2
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
-        % elseif pp == 3
-        %     save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
-        elseif pp == 3
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
-        else
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-        end
-
-        save_name = sprintf('%s_ROI_evoked_dipole', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-
-        % MMN:
-        figure; 
-        t = tiledlayout(1,2);
-        yl = [];
-        for ind = 1:2
-            nexttile(t); hold on; grid on; box on;
-
-            % Standards
-            % plot(DD{pp}.time*1e3 - delay, mean(X_standards(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
-            plot(DD{pp}.time*1e3 - delay, t_standards(ind,:), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
-
-            % Deviants
-            % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
-            plot(DD{pp}.time*1e3 - delay, t_deviants(ind,:), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
-
-            % Difference
-            % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(ind,:,:),3) - mean(X_standards(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
-            plot(DD{pp}.time*1e3 - delay, t_diff(ind,:), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
-            set(gca, 'FontSize', 18);
-            xlim([-100 400]);
-            % yl(ind) = max(abs(ylim));
-            xlabel('Time (ms)');
-
-            if ind == 1
-                title('Left Hemisphere');
-            else
-                title('Right Hemisphere');
-            end
-
-        end
-
-        % Set axes limits and legend
-        % ylim(t.Children, [-1 1]*max(abs(yl)));
-        ylim(t.Children, [-1 1]*10);
-        % ylabel(t, {'Estimated Source', 'Current (nAm)'}, 'FontSize', 18);
-        ylabel(t, 't-stat', 'FontSize', 18);
-        lgd = legend('Standards', 'Deviants', 'MMN', 'location', 'eastoutside');
-        set(gcf, 'Position', [626   476   821   285]);
-
-        % Add text to indicate how many trials per condition
-        
-        annotation('textbox', [lgd.Position(1), lgd.Position(2) - 0.35, lgd.Position(3), 0.3], ...
-            'string', sprintf('# deviants: %.f\n# standards: %.f', length(deviants), length(standards)), 'FontSize', 16, 'EdgeColor', 'None');
-
-        if pp == 1
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
-        elseif pp == 2
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
-        % elseif pp == 3
-        %     save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
-        elseif pp == 3
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
-        else
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-        end
-
-        save_name = sprintf('%s_ROI_MMN_trace_dipole_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-
-        % Combined plot
-        % Left
-        % nexttile(tcomb_left); hold on; grid on; box on;
-        figure(fig_left);
-        axs_left(pp) = subplot(5, 4, [12+pp, 16+pp]); hold on; grid on; box on;
-        % plot(DD{pp}.time*1e3 - delay, mean(X_standards(1,:,:), 3), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
-        % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(1,:,:), 3), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
-        % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(1,:,:),3) - mean(X_standards(1,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
-        plot(DD{pp}.time*1e3 - delay, t_standards(1,:), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
-        plot(DD{pp}.time*1e3 - delay, t_deviants(1,:), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
-        plot(DD{pp}.time*1e3 - delay, t_diff(1,:), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
-        set(gca, 'FontSize', 22);
-        if pp == 1
-            % ylabel(gca, {'Estimated Source', 'Current (nAm)'});
-            ylabel(gca, 't-stat');
-        else
-            set(gca,'ytick',[]);
-        end
-        % Right
-        % nexttile(tcomb_right); hold on; grid on; box on;
-        figure(fig_right);
-        axs_right(pp) = subplot(5, 4, [12+pp, 16+pp]); hold on; grid on; box on;
-        % plot(DD{pp}.time*1e3 - delay, mean(X_standards(2,:,:), 3), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
-        % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(2,:,:), 3), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
-        % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(2,:,:),3) - mean(X_standards(2,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
-        plot(DD{pp}.time*1e3 - delay, t_standards(2,:), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
-        plot(DD{pp}.time*1e3 - delay, t_deviants(2,:), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
-        plot(DD{pp}.time*1e3 - delay, t_diff(2,:), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
-        set(gca, 'FontSize', 22);
-        if pp == 1
-            % ylabel(gca, {'Estimated Source', 'Current (nAm)'});
-            ylabel(gca, 't-stat');
-        else
-            set(gca,'ytick',[]);
-        end
-    end
-    
-    title(axs_left(1), 'No Filter');
-    title(axs_left(2), 'HFC');
-    title(axs_left(3), 'Spatial only AMM');
-    title(axs_left(4), {'AMM with temporal', 'extension'});
-
-    title(axs_right(1), 'No Filter');
-    title(axs_right(2), 'HFC');
-    title(axs_right(3), 'Spatial only AMM');
-    title(axs_right(4), {'AMM with temporal', 'extension'});
-
-    linkaxes(axs_left);
-    xlim(axs_left(1), [-100 400]);
-    xlabel(axs_left(3), 'Time (ms)');
-    % yl = ylim(axs_left(1));
-    % ylim(axs_left(1), [-1 1]*max(abs(yl)));
-    ylim(axs_left(1), [-1 1]*10);
-
-    linkaxes(axs_right);
-    xlim(axs_right(1), [-100 400]);
-    xlabel(axs_right(3), 'Time (ms)');
-    % yl = ylim(axs_right(1));
-    % ylim(axs_right(1), [-1 1]*max(abs(yl)));
-    ylim(axs_right(1), [-1 1]*10);
-
-    set(fig_left, 'Position', [-1860         153        1855         750])
-    set(fig_right, 'Position', [-1860         153        1855         750])
-
-    figure(fig_left);
-    save_loc = fullfile(meta_data{recording, "results_save_loc"});
-    save_name = sprintf('%s_ROI_MMN_trace_dipole_combined_left_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-    print(fullfile(save_loc, save_name),'-dpng','-r300');
-
-    figure(fig_right);
-    save_loc = fullfile(meta_data{recording, "results_save_loc"});
-    save_name = sprintf('%s_ROI_MMN_trace_dipole_combined_right_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-    print(fullfile(save_loc, save_name),'-dpng','-r300');
-
-    close all
-end
-
-%% Find spatiotemporal clusters at source-level - use source stats and power
-
+% %% Fieldtrip dipole fit to plot evoked response, standards and deviants at source level
+% 
 % clearvars -except meta_data colormap123 delay
 % 
+% rng(76);
+% 
 % for recording = 1:size(meta_data,1)
-% 
-%     fprintf('Recording no: %.f of %.f\n', recording, size(meta_data,1));
-% 
-%     % Get data
 %     cd(meta_data{recording, "analysed_data_loc"});
-%     start_string = {'e_ffft_', 'e_hffft_', 'e_m2ffft_', 'e_mffft_'}; %'e_h2ffft_', 
+%     start_string = {'be_ffft_', 'be_hffft_', 'be_m2ffft_', 'be_mffft_'}; %'be_h2ffft_', 
 %     for pp = 1:length(start_string)
 %         DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
 %             strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
 %     end
 % 
-%     ctx = export(gifti(DD{1}.inv{1}.mesh.tess_ctx),'ft');
+%     % Get deviant and standard labels
+%     stim = readtable(meta_data{recording, "stim_data_fname"});
+%     deviants = find(contains(stim.Condition, 'deviant'));
+%     trial_length = diff(deviants);
+%     trial_length = cat(1, trial_length, size(DD{pp},3) - max(deviants) + 1);
 % 
-%     % Create infalted cortex mesh
-%     if ~isfile(fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
-%         'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})))
-%         inflated_ctx_fname = fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
-%                 'anat', sprintf('%s.L.inflated.4k_fs_LR.surf.gii', meta_data{recording, 'sub'}));
-%         combine_surfaces({inflated_ctx_fname, strrep(inflated_ctx_fname, '.L.', '.R.')}, ...
-%             fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
-%             'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})));
-%     end
+%     % Take last tone of each set as standard
+%     standards = deviants(2:end)-1;
+%     standards = cat(1, standards, size(DD{pp},3));
 % 
-%     % Source reconstruct (MNE)
-%     for pp = 1:length(DD)
+%     % Dipole fit based on AMM results
+%     ctx = gifti(DD{4}.inv{1}.mesh.tess_ctx);
 % 
-%         matlabbatch = [];
-%         matlabbatch{1}.spm.meeg.source.invert.D = {fullfile(DD{pp})};
-%         matlabbatch{1}.spm.meeg.source.invert.val = 1;
-%         matlabbatch{1}.spm.meeg.source.invert.whatconditions.all = 1;
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.invtype = 'IID';
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.woi = [-Inf Inf];
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.foi = [2 40];
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.hanning = 1;
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.priors.priorsmask = {''};
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.priors.space = 1;
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.restrict.locs = zeros(0, 3);
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.restrict.radius = 32;
-%         matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.restrict.mask = {''};
-%         matlabbatch{1}.spm.meeg.source.invert.modality = {'All'};
-%         matlabbatch{2}.spm.meeg.source.results.D(1) = cfg_dep('Source inversion: M/EEG dataset(s) after imaging source reconstruction', substruct('.','val', '{}',{1}, '.','val', '{}',{1}, '.','val', '{}',{1}, '.','val', '{}',{1}), substruct('.','D'));
-%         matlabbatch{2}.spm.meeg.source.results.val = 1;
-%         matlabbatch{2}.spm.meeg.source.results.woi = [50 150]+delay;
-%         matlabbatch{2}.spm.meeg.source.results.foi = [2 40];
-%         matlabbatch{2}.spm.meeg.source.results.ctype = 'trials';
-%         matlabbatch{2}.spm.meeg.source.results.space = 0;
-%         matlabbatch{2}.spm.meeg.source.results.format = 'mesh';
-%         matlabbatch{2}.spm.meeg.source.results.smoothing = 8;
-%         matlabbatch{3}.spm.meeg.source.results.D(1) = cfg_dep('Source inversion: M/EEG dataset(s) after imaging source reconstruction', substruct('.','val', '{}',{1}, '.','val', '{}',{1}, '.','val', '{}',{1}, '.','val', '{}',{1}), substruct('.','D'));
-%         matlabbatch{3}.spm.meeg.source.results.val = 1;
-%         matlabbatch{3}.spm.meeg.source.results.woi = [-150 -50]+delay;
-%         matlabbatch{3}.spm.meeg.source.results.foi = [2 40];
-%         matlabbatch{3}.spm.meeg.source.results.ctype = 'trials';
-%         matlabbatch{3}.spm.meeg.source.results.space = 0;
-%         matlabbatch{3}.spm.meeg.source.results.format = 'mesh';
-%         matlabbatch{3}.spm.meeg.source.results.smoothing = 8;
+%     % Find initialisation positions
+%     linds = 1:size(ctx.vertices,1)/2;
+%     rinds = size(ctx.vertices,1)/2+1:size(ctx.vertices,1);
+%     [~, maxind_l] = max(DD{4}.inv{1}.contrast.GW{1}(linds));
+%     [~, maxind_r] = max(DD{4}.inv{1}.contrast.GW{1}(rinds));
+%     maxind_l = linds(maxind_l);
+%     maxind_r = rinds(maxind_r);
 % 
-%         a = spm_jobman('run',matlabbatch);
-% 
-%         % Create baseline data structure
-%         source_data_baseline = cell(length(a{3}.files), 1);
-%         for gifti_file_ind = 1:length(a{3}.files) 
-%             source_data_baseline{gifti_file_ind} = [];
-%             source_data_baseline{gifti_file_ind}.pos = ctx.pnt;
-%             source_data_baseline{gifti_file_ind}.inside = ones(size(source_data_baseline{gifti_file_ind}.pos,1), 1)==1;
-%             source_data_baseline{gifti_file_ind}.pow = export(gifti(fullfile(a{3}.files{gifti_file_ind})), ...
-%                 'patch').facevertexcdata;
-%         end
-% 
-%         % Create time of interest data structure
-%         source_data_toi = cell(length(a{2}.files), 1);
-%         for gifti_file_ind = 1:length(a{2}.files) 
-%             source_data_toi{gifti_file_ind} = [];
-%             source_data_toi{gifti_file_ind}.pos = ctx.pnt;
-%             source_data_toi{gifti_file_ind}.inside = ones(size(source_data_toi{gifti_file_ind}.pos,1), 1)==1;
-%             source_data_toi{gifti_file_ind}.pow = export(gifti(fullfile(a{2}.files{gifti_file_ind})), ...
-%                 'patch').facevertexcdata;
-%         end
-% 
-%         % Perform Statistical Analysis
-%         cfg                     = [];
-%         cfg.method              = 'montecarlo';
-%         cfg.statistic           = 'ft_statfun_indepsamplesT';
-%         cfg.parameter           = 'pow';
-%         cfg.correctm            = 'cluster';
-%         cfg.alpha               = 0.05;
-%         cfg.numrandomization    = 1000;
-%         cfg.tail                = 1;
-% 
-%         % Design Matrix
-%         ntrials                 = numel(source_data_toi);
-%         %cfg.design(1,:)         = [1:ntrials 1:ntrials];
-%         cfg.design(1,:)         = [ones(1,ntrials) ones(1,ntrials)*2];
-% 
-%         % row of design matrix that contains unit variable (in this case: trials)
-%         %cfg.uvar                = 1;
-%         % row of design matrix that contains independent variable (the conditions)
-%         cfg.ivar                = 1; 
-% 
-%         % Perform statistical analysis
-%         [stat]                  = ft_sourcestatistics(cfg,source_data_toi{:}, source_data_baseline{:});
-% 
-%         % Show raw source level statistics (2D plot)
-%         inflated_ctx = ft_read_headshape(fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
-%                 'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})));
-% 
-%         stat.tri = ctx.tri;
-%         cfg                     = [];
-%         cfg.method              = 'surface';
-%         cfg.facecolor           = [0.4 0.4 0.4];
-%         cfg.vertexcolor         = 'none';
-%         cfg.funparameter        = 'stat';
-%         cfg.location            = 'max';
-%         % cfg.maskparameter       = 'mask';
-%         ft_sourceplot(cfg, stat);
-%         colormap(colormap123) % change the colormap
-% 
-%     end
-% end
-
-%% Find spatiotemporal clusters at source-level 
-
-% clearvars -except meta_data colormap123 delay
-% 
-% for recording = 1:size(meta_data,1)
-% 
-%     fprintf('Recording no: %.f of %.f\n', recording, size(meta_data,1));
-% 
-%     % Get data
-%     cd(meta_data{recording, "analysed_data_loc"});
-%     start_string = {'e_ffft_', 'e_hffft_', 'e_m2ffft_', 'e_mffft_'}; %'e_h2ffft_', 
-%     for pp = 1:length(start_string)
-%         DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
-%             strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
-%     end
-% 
-%     ctx = export(gifti(DD{1}.inv{1}.mesh.tess_ctx),'ft');
-% 
-%     % Create infalted cortex mesh
-%     if ~isfile(fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
-%         'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})))
-%         inflated_ctx_fname = fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
-%                 'anat', sprintf('%s.L.inflated.4k_fs_LR.surf.gii', meta_data{recording, 'sub'}));
-%         combine_surfaces({inflated_ctx_fname, strrep(inflated_ctx_fname, '.L.', '.R.')}, ...
-%             fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
-%             'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})));
-%     end
-% 
-%     % Create a FieldTrip structure to fill
-%     source_data = [];
-%     source_data.label = cellstr(num2str((1:size(ctx.pnt,1))'));
-%     elec = [];
-%     elec.label = source_data.label;
-%     elec.elecpos = ctx.pnt;
-%     elec.unit = 'mm';
-%     elec.chanpos = elec.elecpos;
-%     source_data.elec = elec;
-% 
-%     hdr = [];
-%     hdr.Fs          = fsample(DD{pp});
-%     hdr.nChans      = size(ctx.pnt,1);
-%     hdr.label       = source_data.label;
-%     hdr.chanunit    = repmat({'nAm'}, 1, size(ctx.pnt,1));
-%     hdr.chantype = repmat({'virtualelec'}, 1, size(ctx.pnt,1));
-%     source_data.hdr = hdr;
-%     source_data.fsample = DD{pp}.fsample;
-% 
-%     % Find neighbours of mesh points
+%     % Format data for fieldtrip
+%     data = ftraw(DD{4});
 %     cfg = [];
-%     cfg.method = 'distance';
-%     cfg.neighbourdist = 7;
-%     neighbours = ft_prepare_neighbours(cfg, source_data);
+%     cfg.trials = indtrial(DD{4}, 'tone', 'GOOD');
+%     data = ft_selectdata(cfg, data);
 % 
-%     % Source reconstruct
+%     % Average
+%     tl_data = ft_timelockanalysis([], data);
+% 
+%     % Prepare headmodel
+%     mesh = ft_read_headshape(DD{4}.inv{1}.mesh.tess_iskull);
+%     cfg = [];
+%     cfg.method = 'singleshell';
+%     headmodel = ft_prepare_headmodel(cfg, mesh);
+% 
+%     % Prepare sourcemodel - use cortical mesh
+%     cfg = [];
+%     cfg.method = 'basedoncortex';
+%     cfg.headshape = ft_read_headshape(DD{4}.inv{1}.mesh.tess_ctx);
+%     cfg.headmodel = headmodel;
+%     cfg.inwardshift = 0;
+%     sourcemodel = ft_prepare_sourcemodel(cfg);
+% 
+%     % Prepare leadfields
+%     cfg                  = [];
+%     cfg.grad             = data.grad;
+%     cfg.headmodel        = headmodel;
+%     cfg.reducerank       = 2;
+%     cfg.channel          = DD{4}.chanlabels(indchantype(DD{pp}, 'MEGMAG', 'GOOD'));
+%     cfg.sourcemodel = sourcemodel;
+%     sourcemodel = ft_prepare_leadfield(cfg);
+% 
+%     % Dipole fit
+%     cfg = [];
+%     cfg.latency = [0.08 0.12]+delay*1e-3;
+%     cfg.numdipoles = 2;
+%     cfg.symmetry = [];
+%     cfg.gridsearch = 'no';
+%     cfg.dip.pos = double(ctx.vertices([maxind_l, maxind_r], :));
+%     cfg.headmodel = headmodel;
+%     cfg.sourcemodel = sourcemodel;
+%     cfg.channel = DD{4}.chanlabels(indchantype(DD{4}, 'MEGMAG', 'GOOD'));
+%     cfg.senstype = 'meg';
+%     source = ft_dipolefitting(cfg, tl_data);
+% 
+%     % Plot dipole position
+%     figure; hold on;
+%     trisurf(sourcemodel.tri, sourcemodel.pos(:,1), sourcemodel.pos(:,2), sourcemodel.pos(:,3), 'FaceColor', [0.4 0.4 0.4], 'FaceAlpha', 0.3, 'EdgeColor', 'None');
+%     daspect([1 1 1])
+%     ft_plot_dipole(source.dip.pos(1,:), mean(source.dip.mom(1:3,:),2), 'color', 'b', 'unit', 'mm')
+%     ft_plot_dipole(source.dip.pos(2,:), mean(source.dip.mom(4:6,:),2), 'color', 'b', 'unit', 'mm')
+%     set(gcf, 'Position', [-1380, 320, 560, 420]);
+% 
+%     view(-90,0);
+%     save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
+% 
+%     save_name = sprintf('%s_ft_dip_fit_left', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%     % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%     savefig(fullfile(save_loc, [save_name, '.fig']));
+%     % 
+%     % view([90 0]);
+%     % 
+%     % save_name = sprintf('%s_ft_dip_fit_right', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%     % print(fullfile(save_loc, save_name),'-dpng','-r300');
+% 
+% 
+%     % combined plot for supplementary material
+%     % Left
+%     fig_left = figure;
+%     subplot(5, 4, 1:12);
+%     trisurf(sourcemodel.tri, sourcemodel.pos(:,1), sourcemodel.pos(:,2), sourcemodel.pos(:,3), 'FaceColor', [0.4 0.4 0.4], 'FaceAlpha', 0.3, 'EdgeColor', 'None');
+%     daspect([1 1 1])
+%     ft_plot_dipole(source.dip.pos(1,:), mean(source.dip.mom(1:3,:),2), 'color', 'b', 'unit', 'mm')
+%     view(-90,0);
+%     axs_left = gobjects(1,4);
+% 
+%     % Right
+%     fig_right = figure;
+%     subplot(5, 4, 1:12);
+%     trisurf(sourcemodel.tri, sourcemodel.pos(:,1), sourcemodel.pos(:,2), sourcemodel.pos(:,3), 'FaceColor', [0.4 0.4 0.4], 'FaceAlpha', 0.3, 'EdgeColor', 'None');
+%     daspect([1 1 1])
+%     ft_plot_dipole(source.dip.pos(2,:), mean(source.dip.mom(4:6,:),2), 'color', 'b', 'unit', 'mm')
+%     view([90 0]);
+%     axs_right = gobjects(1,4);
+% 
+%     % Find cortex point
+%     for ind = 1:2
+%         [~, sourceind(ind)] = min(sqrt(sum((ctx.vertices - source.dip.pos(ind,:)).^2, 2)));
+%     end
+%     sourceind = sort(sourceind);
+% 
+%     % Plot estimated source current for each preprocessing step
 %     for pp = 1:length(DD)
 % 
-%         % Create virtual electrodes at each mesh point
-%         % if ~isfile(fullfile('E:\Data\Neuro1\Auditory\anonymised_for_sharing\analysedData', ...
-%             % meta_data{recording, 'sub'}, 'current_distributions_for_mne', DD{pp}.fname))
-%             matlabbatch = [];
-%             matlabbatch{1}.spm.meeg.source.invert.D = {DD{pp}.fname};
-%             matlabbatch{1}.spm.meeg.source.invert.val = 1;
-%             matlabbatch{1}.spm.meeg.source.invert.whatconditions.all = 1;
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.invtype = 'IID';
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.woi = [-Inf Inf];
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.foi = [2 40];
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.hanning = 1;
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.priors.priorsmask = {''};
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.priors.space = 1;
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.restrict.locs = zeros(0, 3);
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.restrict.radius = 32;
-%             matlabbatch{1}.spm.meeg.source.invert.isstandard.custom.restrict.mask = {''};
-%             matlabbatch{1}.spm.meeg.source.invert.modality = {'All'};
-%             matlabbatch{2}.spm.meeg.source.results.D(1) = cfg_dep('Source inversion: M/EEG dataset(s) after imaging source reconstruction', substruct('.','val', '{}',{1}, '.','val', '{}',{1}, '.','val', '{}',{1}, '.','val', '{}',{1}), substruct('.','D'));
-%             matlabbatch{2}.spm.meeg.source.results.val = 1;
-%             matlabbatch{2}.spm.meeg.source.results.woi = [50 150];
-%             matlabbatch{2}.spm.meeg.source.results.foi = [2 40];
-%             matlabbatch{2}.spm.meeg.source.results.ctype = 'evoked';
-%             matlabbatch{2}.spm.meeg.source.results.space = 0;
-%             matlabbatch{2}.spm.meeg.source.results.format = 'mesh';
-%             matlabbatch{2}.spm.meeg.source.results.smoothing = 8;
-%             matlabbatch{2}.spm.meeg.source.results.D(1) = cfg_dep('Source inversion: M/EEG dataset(s) after imaging source reconstruction', substruct('.','val', '{}',{1}, '.','val', '{}',{1}, '.','val', '{}',{1}, '.','val', '{}',{1}), substruct('.','D'));
-%             matlabbatch{2}.spm.meeg.source.results.val = 1;
-%             matlabbatch{2}.spm.meeg.source.results.woi = [-150 -50];
-%             matlabbatch{2}.spm.meeg.source.results.foi = [2 40];
-%             matlabbatch{2}.spm.meeg.source.results.ctype = 'evoked';
-%             matlabbatch{2}.spm.meeg.source.results.space = 0;
-%             matlabbatch{2}.spm.meeg.source.results.format = 'mesh';
-%             matlabbatch{2}.spm.meeg.source.results.smoothing = 8;
+%         L = full(spm_eeg_lgainmat(DD{pp},sourceind));
 % 
-%             a = spm_jobman('run',matlabbatch);
-%             DD{pp} = spm_eeg_load(fullfile(DD{pp}));
+%         good_trials = indtrial(DD{pp}, 'tone', 'GOOD');
+%         X_evoked = zeros(size(L,2), size(DD{pp},2), length(good_trials));
+%         X_standards = zeros(size(L,2), size(DD{pp},2), length(standards));
+%         X_deviants = zeros(size(L,2), size(DD{pp},2), length(deviants));
 % 
-%             toi = 100;
-%             delay = 10; % ms - neuro-1 delay between truth and recording
-%             [~, toi_ind] = min(abs(DD{pp}.time - toi*1e-3 - delay*1e-3));
-% 
-%             % Estimate current
-%             Y = DD{pp}(indchantype(DD{pp},'MEGMAG', 'GOOD'), ...
-%                 toi_ind-floor(15e-3*DD{pp}.fsample):toi_ind+floor(15e-3*DD{pp}.fsample),...
-%                 indtrial(DD{pp}, DD{pp}.condlist{1}, 'GOOD'));
-%             J = zeros(size(DD{pp}.inv{1}.inverse.M,1), size(Y,2), size(Y,3));
-%             for tt = 1:size(Y,2)
-%                 UY = DD{pp}.inv{1}.inverse.U{1}*squeeze(Y(:,tt,:))*DD{pp}.inv{1}.inverse.scale/size(Y,3); % Spatial projector
-%                 J(:,tt,:) = DD{pp}.inv{1}.inverse.M*UY; % MAP projector
-%             end
-%             clear Y UY
-% 
-% 
-%             % Save data to avoid recreating
-%             if ~isfolder(fullfile('E:\Data\Neuro1\Auditory\anonymised_for_sharing\analysedData', ...
-%                     meta_data{recording, 'sub'}, 'current_distributions_for_mne2'))
-%                 mkdir(fullfile('E:\Data\Neuro1\Auditory\anonymised_for_sharing\analysedData', ...
-%                     meta_data{recording, 'sub'}, 'current_distributions_for_mne2'));
-%             end
-%             save(fullfile('E:\Data\Neuro1\Auditory\anonymised_for_sharing\analysedData', ...
-%                 meta_data{recording, 'sub'}, 'current_distributions_for_mne2', DD{pp}.fname), 'J', '-v7.3');
-% 
-% 
-%         % else
-%         %     load(fullfile('E:\Data\Neuro1\Auditory\anonymised_for_sharing\analysedData', ...
-%         %         meta_data{recording, 'sub'}, 'current_distributions_for_mne', DD{pp}.fname));
-%         % end
-% 
-%         % Write into source_data variable
-%         source_data.trial = cell(1, size(J,3));
-%         for jj = 1:size(J,3)
-%             source_data.trial{jj} = J(:,:,jj);
+%         for tt = 1:length(good_trials)
+%             X_evoked(:,:,tt) = pinv(L)*DD{pp}(indchantype(DD{pp},'MEGMAG','GOOD'),:,good_trials(tt));
 %         end
-%         clear J ctx;
-% 
-%         % Update time variables of source_data
-%         source_data.time = repmat({DD{pp}.time(toi_ind-floor(15e-3*DD{pp}.fsample):toi_ind+floor(15e-3*DD{pp}.fsample))}, 1, length(source_data.trial));
-%         timeind = toi_ind-floor(15e-3*DD{pp}.fsample):toi_ind+floor(15e-3*DD{pp}.fsample);
-%         trialind = indtrial(DD{pp}, 'tone', 'GOOD');
-%         onsets = trialonset(DD{pp}, trialind);
-%         if all(onsets>0)
-%             onsets = round(onsets(:)*fsample(DD{pp}));
-%             source_data.sampleinfo = [onsets+timeind(1) onsets+timeind(end)]-1;
+%         for tt = 1:length(deviants)
+%             X_deviants(:,:,tt) = pinv(L)*DD{pp}(indchantype(DD{pp},'MEGMAG','GOOD'),:,deviants(tt));
 %         end
-%         source_data.hdr.nSamples    = length(timeind);
-%         source_data.hdr.nSamplesPre = sum(time(DD{pp}, timeind)<0);
-%         source_data.hdr.nTrials     = length(trialind);
+%         for tt = 1:length(standards)
+%             X_standards(:,:,tt) = pinv(L)*DD{pp}(indchantype(DD{pp},'MEGMAG','GOOD'),:,standards(tt));
+%         end
 % 
-%         % Create a zeros dataset for comparison
-%         source_data_zeros = source_data;
-%         source_data_zeros.trial = repmat({zeros(size(source_data.trial{1}))}, 1, size(source_data.trial,2));
+%         % T-test across trials
+%         SE_evoked = std(X_evoked, [], 3)./sqrt(size(X_evoked,3));
+%         t_evoked = mean(X_evoked, 3)./SE_evoked;
+%         SE_standards = std(X_standards, [], 3)./sqrt(size(X_standards, 3));
+%         t_standards = mean(X_standards,3)./SE_standards;
+%         SE_deviants = std(X_deviants, [], 3)./sqrt(size(X_deviants, 3));
+%         t_deviants = mean(X_deviants,3)./SE_deviants;
 % 
-%         % Timelock
-%         cfg = [];
-%         cfg.keeptrials = 'yes';
-%         tl_source = ft_timelockanalysis(cfg, source_data);
-%         tl_source_zeros = ft_timelockanalysis(cfg, source_data_zeros);
+%         % Unpaired t-test equal variance between deviants and standards for MMN response
+%         n1 = size(X_deviants,3);
+%         n2 = size(X_standards,3);
+%         SE = sqrt(((n1-1)*std(X_deviants, [], 3).^2 + (n2-1)*std(X_standards, [], 3).^2)./(n1 + n2 - 2))*...
+%             sqrt(1/n1 + 1/n2);
+%         t_diff = (mean(X_deviants,3) - mean(X_standards,3))./SE;
 % 
-%         % Permutation test
-%         cfg = [];
-%         cfg.method = 'montecarlo';
-%         cfg.statistic = 'depsamplesT';
-%         cfg.correctm = 'cluster';
-%         cfg.clusteralpha = 0.05;
-%         cfg.clusterstatistic = 'maxsum';
-%         cfg.minnbchan = 0; 
-%         cfg.neighbours = neighbours;
-%         cfg.tail = 0;
-%         % cfg.clustertail      = 0;
-%         cfg.alpha = 0.025;
-%         cfg.numrandomization = 100;
 % 
-%         n_zeros  = size(tl_source_zeros.trial, 1);
-%         n_toi = size(tl_source.trial, 1);
+%         % Evoked response:
+%         figure; 
+%         t = tiledlayout(1,2);
+%         yl = [];
+%         for ind = 1:2
+%             nexttile(t); hold on; grid on; box on;
 % 
-%         cfg.design = [ones(1,n_zeros), ones(1,n_toi)*2; 1:n_zeros, 1:n_toi];
-%         cfg.ivar = 1;
-%         cfg.channel = 'all';
-%         [stat] = ft_timelockstatistics(cfg, tl_source, tl_source_zeros);
+%             % plot(DD{pp}.time*1e3 - delay, mean(X_evoked(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', 'k');
+%             plot(DD{pp}.time*1e3 - delay, t_standards(ind,:), 'LineWidth', 3, 'LineStyle', '-', 'color', 'k');
 % 
-%         % Make a vector of all p-values associated with the clusters from ft_timelockstatistics.
-%         pos_cluster_pvals = [stat.posclusters(:).prob];
+%             set(gca, 'FontSize', 18);
+%             xlim([-100 400]);
+%             yl(ind) = max(abs(ylim));
+%             xlabel('Time (ms)');
 % 
-%         % Then, find which clusters are deemed interesting to visualize
-%         pos_clust = find(pos_cluster_pvals < 0.025);
-%         pos = ismember(stat.posclusterslabelmat, pos_clust);
+%             if ind == 1
+%                 title('Left Hemisphere');
+%             else
+%                 title('Right Hemisphere');
+%             end
 % 
-%         % and now for the negative clusters...
-%         neg_cluster_pvals = [stat.negclusters(:).prob];
-%         neg_clust = find(neg_cluster_pvals < 0.025);
-%         neg = ismember(stat.negclusterslabelmat, neg_clust);
+%         end
 % 
-%         % Plot significant source power
+%         % Set axes limits and legend
+%         % ylim(t.Children, [-1 1]*max(abs(yl)));
+%         ylim(t.Children, [-1 1]*7);
+%         % ylabel(t, {'Estimated Source', 'Current (nAm)'}, 'FontSize', 18);
+%         ylabel(t, 't-stat', 'FontSize', 18);
+%         legend('Standards', 'location', 'eastoutside');
+%         set(gcf, 'Position', [626   476   821   285]);
 % 
-%         figure;
-%         pos_int = any(pos, 2);
-%         neg_int = any(neg, 2);
-% 
-%         inflated_ctx = ft_read_headshape(fullfile(char(extractBefore(meta_data{recording, "raw_data_loc"},'meg')),...
-%                 'anat', sprintf('%s_inflated_cortex.gii', meta_data{recording, 'sub'})));
-% 
-%         cfg = [];
-%         cfg.method = 'surface';
-%         cfg.facecolor = [0.4 0.4 0.4];
-%         cfg.vertexcolor = 'none';
-% 
-%        if any(pos_int | neg_int)
-% 
-%             % Plot
-% 
-%             inflated_ctx.pow = export(gifti(a{2}.files{1}), 'patch').facevertexcdata;
-%             inflated_ctx.mask = any(pos_int | neg_int, 2);
-% 
-%             %     cfg.funcolorlim    = [0, 15];
-%             cfg.funparameter   = 'pow';
-%             cfg.maskparameter  = 'mask';
-%             cfg.funcolormap    = 'hot';
-%             %cfg.funcolorlim    = [0, max(data_summary(:,1))*1.1];
-%             cfg.colorbartext = 'Source Power (a.u.)';
-%             ft_sourceplot(cfg, inflated_ctx);
+%         if pp == 1
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
+%         elseif pp == 2
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
+%         % elseif pp == 3
+%         %     save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+%         elseif pp == 3
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
 %         else
-%             surf.pos = inflated_ctx.pos;
-%             surf.tri = inflated_ctx.tri;
-%             ft_plot_mesh(surf,'edgecolor', 'none', 'facecolor', cfg.facecolor, 'vertexcolor', cfg.vertexcolor);
-%             lighting gouraud
-%             camlight
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
 %         end
 % 
-%         view ([-90 5])             % rotate the object in the view
-%         cl1 = camlight('headlight');
-%         set(gcf, 'color', 'w');
-%         set(gca, 'FontSize', 26);
-%         material dull
+%         save_name = sprintf('%s_ROI_evoked_dipole', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%         % MMN:
+%         figure; 
+%         t = tiledlayout(1,2);
+%         yl = [];
+%         for ind = 1:2
+%             nexttile(t); hold on; grid on; box on;
+% 
+%             % Standards
+%             % plot(DD{pp}.time*1e3 - delay, mean(X_standards(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
+%             plot(DD{pp}.time*1e3 - delay, t_standards(ind,:), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
+% 
+%             % Deviants
+%             % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
+%             plot(DD{pp}.time*1e3 - delay, t_deviants(ind,:), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
+% 
+%             % Difference
+%             % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(ind,:,:),3) - mean(X_standards(ind,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
+%             plot(DD{pp}.time*1e3 - delay, t_diff(ind,:), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
+%             set(gca, 'FontSize', 18);
+%             xlim([-100 400]);
+%             % yl(ind) = max(abs(ylim));
+%             xlabel('Time (ms)');
+% 
+%             if ind == 1
+%                 title('Left Hemisphere');
+%             else
+%                 title('Right Hemisphere');
+%             end
+% 
+%         end
+% 
+%         % Set axes limits and legend
+%         % ylim(t.Children, [-1 1]*max(abs(yl)));
+%         ylim(t.Children, [-1 1]*10);
+%         % ylabel(t, {'Estimated Source', 'Current (nAm)'}, 'FontSize', 18);
+%         ylabel(t, 't-stat', 'FontSize', 18);
+%         lgd = legend('Standards', 'Deviants', 'MMN', 'location', 'eastoutside');
+%         set(gcf, 'Position', [626   476   821   285]);
+% 
+%         % Add text to indicate how many trials per condition
+% 
+%         annotation('textbox', [lgd.Position(1), lgd.Position(2) - 0.35, lgd.Position(3), 0.3], ...
+%             'string', sprintf('# deviants: %.f\n# standards: %.f', length(deviants), length(standards)), 'FontSize', 16, 'EdgeColor', 'None');
+% 
+%         if pp == 1
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
+%         elseif pp == 2
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
+%         % elseif pp == 3
+%         %     save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+%         elseif pp == 3
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
+%         else
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
+%         end
+% 
+%         save_name = sprintf('%s_ROI_MMN_trace_dipole_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%         % Combined plot
+%         % Left
+%         % nexttile(tcomb_left); hold on; grid on; box on;
+%         figure(fig_left);
+%         axs_left(pp) = subplot(5, 4, [12+pp, 16+pp]); hold on; grid on; box on;
+%         % plot(DD{pp}.time*1e3 - delay, mean(X_standards(1,:,:), 3), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
+%         % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(1,:,:), 3), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
+%         % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(1,:,:),3) - mean(X_standards(1,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
+%         plot(DD{pp}.time*1e3 - delay, t_standards(1,:), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
+%         plot(DD{pp}.time*1e3 - delay, t_deviants(1,:), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
+%         plot(DD{pp}.time*1e3 - delay, t_diff(1,:), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
+%         set(gca, 'FontSize', 22);
+%         if pp == 1
+%             % ylabel(gca, {'Estimated Source', 'Current (nAm)'});
+%             ylabel(gca, 't-stat');
+%         else
+%             set(gca,'ytick',[]);
+%         end
+%         % Right
+%         % nexttile(tcomb_right); hold on; grid on; box on;
+%         figure(fig_right);
+%         axs_right(pp) = subplot(5, 4, [12+pp, 16+pp]); hold on; grid on; box on;
+%         % plot(DD{pp}.time*1e3 - delay, mean(X_standards(2,:,:), 3), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
+%         % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(2,:,:), 3), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
+%         % plot(DD{pp}.time*1e3 - delay, mean(X_deviants(2,:,:),3) - mean(X_standards(2,:,:), 3), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
+%         plot(DD{pp}.time*1e3 - delay, t_standards(2,:), 'LineWidth', 3, 'LineStyle', '--', 'color', [0.3639    0.5755    0.7484]);
+%         plot(DD{pp}.time*1e3 - delay, t_deviants(2,:), 'LineWidth', 3, 'LineStyle', ':', 'color', [0.9153    0.2816    0.2878]);
+%         plot(DD{pp}.time*1e3 - delay, t_diff(2,:), 'LineWidth', 3, 'LineStyle', '-', 'color', [0.3373    0.3020    0.2902]);
+%         set(gca, 'FontSize', 22);
+%         if pp == 1
+%             % ylabel(gca, {'Estimated Source', 'Current (nAm)'});
+%             ylabel(gca, 't-stat');
+%         else
+%             set(gca,'ytick',[]);
+%         end
+%     end
+% 
+%     title(axs_left(1), 'No Filter');
+%     title(axs_left(2), 'HFC');
+%     title(axs_left(3), 'Spatial only AMM');
+%     title(axs_left(4), {'AMM with temporal', 'extension'});
+% 
+%     title(axs_right(1), 'No Filter');
+%     title(axs_right(2), 'HFC');
+%     title(axs_right(3), 'Spatial only AMM');
+%     title(axs_right(4), {'AMM with temporal', 'extension'});
+% 
+%     linkaxes(axs_left);
+%     xlim(axs_left(1), [-100 400]);
+%     xlabel(axs_left(3), 'Time (ms)');
+%     % yl = ylim(axs_left(1));
+%     % ylim(axs_left(1), [-1 1]*max(abs(yl)));
+%     ylim(axs_left(1), [-1 1]*10);
+% 
+%     linkaxes(axs_right);
+%     xlim(axs_right(1), [-100 400]);
+%     xlabel(axs_right(3), 'Time (ms)');
+%     % yl = ylim(axs_right(1));
+%     % ylim(axs_right(1), [-1 1]*max(abs(yl)));
+%     ylim(axs_right(1), [-1 1]*10);
+% 
+%     set(fig_left, 'Position', [-1860         153        1855         750])
+%     set(fig_right, 'Position', [-1860         153        1855         750])
+% 
+%     figure(fig_left);
+%     save_loc = fullfile(meta_data{recording, "results_save_loc"});
+%     save_name = sprintf('%s_ROI_MMN_trace_dipole_combined_left_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%     % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%     savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%     figure(fig_right);
+%     save_loc = fullfile(meta_data{recording, "results_save_loc"});
+%     save_name = sprintf('%s_ROI_MMN_trace_dipole_combined_right_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%     % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%     savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%     close all
+% end
+% 
+% 
+% %% Plot time series
+% 
+% for recording = 1:size(meta_data,1)
+% 
+%     if strcmp(meta_data{recording, "sub"}, 'sub-003')
+%         rad_ax = 'Z';
+%     else
+%         rad_ax = 'Y';
+%     end
+% 
+%     start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'};
+%     for pp = 1:length(start_string)
+%         DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
+%             strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
+%     end
+% 
+%     for pp = 1:length(DD)
+% 
+%         D = DD{pp};
+% 
+%         good_trials = indtrial(D, 'tone', 'GOOD');
+%         se = std(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),[],3)./sqrt(length(good_trials));
+%         t = mean(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),3)./se;
+% 
+%         [~, tind] = min(abs(D.time - 99*1e-3));
+%         max_colour = interp1([min(abs(t(:,tind))), max(abs(t(:,tind)))], [0.9, 0], abs(t(:,tind)));
+%         [~, plot_order] = sort(max_colour, 'descend');
+%         max_colour = repmat(max_colour, 1, 3);
+% 
+%         % Plot t stat
+%         figure; hold on; grid on; box on;
+%         for chan = 1:size(t,1)
+%             plot(1e3*D.time - delay, t(plot_order(chan),:), 'color', max_colour(plot_order(chan),:), 'LineWidth', 2);
+%         end
+%         a = tinv(1-0.025/(range(D.time)*40*length(plot_order)), size(D,3)-1);
+%         l1 = plot([-100 400], [a a], 'b--', 'LineWidth', 2);
+%         plot([-100 400], [-a -a], 'b--', 'LineWidth', 2);
+%         % legend(l1, 'Sig. Threshold')
+%         xlim([-100 400]);
+%         if contains(meta_data{recording, "raw_data_name"}, 'seat') || contains(meta_data{recording, "raw_data_name"}, 'Seat')
+%             ylim([-25 25]);
+%         else
+%             ylim([-1 1]*13);
+%         end
+%         xlabel('Time (ms)');
+%         ylabel('t-stat');
+%         set(gcf, 'Position', [680   654   451   344]);
+%         set(gca, 'FontSize', 24);
+%         fname = D.fname;
 % 
 %         if pp == 1
 %             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
@@ -1875,170 +1769,100 @@ end
 %             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
 %         elseif pp == 3
 %             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
+%         elseif pp == 4
+%             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
 %         else
 %             save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
 %         end
+%         if ~exist(save_loc, 'dir')
+%             mkdir(save_loc);
+%         end
 % 
-%         save_name = sprintf('%s_min_norm_clusters_left', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-%         print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         save_name = sprintf('%s_t_stat_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
 % 
-%         view ([90 0])             % rotate the object in the view
-%         cl2 = camlight('headlight');
-%         cl2.Color = 0.4*ones(1,3);
+%         % Plot topography of t-stat at 100 ms
+%         lay_name = fullfile(meta_data{recording, "analysed_data_loc"}, ...
+%             sprintf('%s_2Dlayout.mat', extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm')));
 % 
-%         save_name = sprintf('%s_min_norm_clusters_right', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-%         print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         if isfile(lay_name)
+%             load(lay_name);
+%         else
+%             fid = fiducials(D);
+%             fid_struct = struct('NAS', fid.fid.pnt(contains(fid.fid.label, 'nas'),:), ...
+%                 'LPA', fid.fid.pnt(contains(fid.fid.label, 'lpa'),:), ...
+%                 'RPA', fid.fid.pnt(contains(fid.fid.label, 'rpa'),:));
+%             pos = D.sensors('MEG').coilpos;
+%             lay = spm_get_anatomical_layout(D.sensors('MEG').coilpos(endsWith(D.sensors('MEG').label, ['-', rad_ax]),:), ...
+%                 D.sensors('MEG').label(endsWith(D.sensors('MEG').label, ['-', rad_ax])),...
+%                 double(gifti(D.inv{1}.mesh.tess_scalp).vertices), fid_struct, 0);
+%             save(lay_name, 'lay');
+%         end
 % 
+%         data = ftraw(D);
+%         cfg = [];
+%         cfg.channel = intersect(data.grad.label, D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD')));
+%         cfg.trials = good_trials;
+%         avdata = ft_timelockanalysis(cfg, data);
+%         tavdata = avdata;
+%         tavdata.avg = t;
+% 
+%         figure;
+%         cfg = [];
+%         cfg.layout    = lay;
+%         cfg.colorbar  = 'EastOutside';
+%         cfg.colorbartext = 't-stat (100 ms)';
+%         if contains(meta_data{recording, "raw_data_name"}, 'seat') || contains(meta_data{recording, "raw_data_name"}, 'Seat')
+%             cfg.zlim      = [-15 15];
+%         else
+%             cfg.zlim = [-1 1]*8.83;
+%         end
+%         cfg.colormap  = colormap123;
+%         cfg.xlim = [100, 100]*1e-3 + delay*1e-3;
+%         cfg.comment = 'no';
+%         cfg.figure = gca;
+%         set(gca, 'FontSize', 24);
+%         ft_topoplotER(cfg, tavdata)
+%         set(gcf, 'Position', [994   704   404   274]);
+% 
+%         save_name = sprintf('%s_t_stat_topography', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%         % Plot average signal
+%         figure; hold on; grid on; box on;
+%         dat = mean(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),3);
+%         for chan = 1:size(t,1)
+%             plot(1e3*D.time - delay, dat(plot_order(chan),:), 'color', max_colour(plot_order(chan),:), 'LineWidth', 2);
+%         end
+%         xlim([-100 400]);
+%         ylim([-550 550]);
+%         xlabel('Time (ms)');
+%         ylabel('B (fT)');
+%         grid on;
+%         set(gcf, 'Position', [680   654   451   344]);
+%         set(gca, 'FontSize', 24);
+%         save_name = sprintf('%s_average_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
+% 
+%         % Topoplot
+%         figure;
+%         cfg.figure = gca;
+%         cfg.colorbartext = 'B (fT)';
+%         cfg.zlim      = [-350, 350];
+%         ft_topoplotER(cfg, avdata)
+%         set(gcf, 'Position', [994   704   404   274]);
+%         set(gca, 'FontSize', 24);
+% 
+%         save_name = sprintf('%s_average_topography', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
+%         % print(fullfile(save_loc, save_name),'-dpng','-r300');
+%         savefig(fullfile(save_loc, [save_name, '.fig']));
 %     end
+% 
+%     close all
 % end
-
-
-%% Plot time series
-
-for recording = 1:size(meta_data,1)
-    
-    if strcmp(meta_data{recording, "sub"}, 'sub-003')
-        rad_ax = 'Z';
-    else
-        rad_ax = 'Y';
-    end
-
-    start_string = {'e_ffft_', 'e_hffft_', 'e_h2ffft_', 'e_m2ffft_', 'e_mffft_'};
-    for pp = 1:length(start_string)
-        DD{pp} = spm_eeg_load(char(fullfile(meta_data{recording, "analysed_data_loc"}, ...
-            strcat(start_string{pp}, extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'), '.mat'))));
-    end
-
-    for pp = 1:length(DD)
-        
-        D = DD{pp};
-
-        good_trials = indtrial(D, 'tone', 'GOOD');
-        se = std(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),[],3)./sqrt(length(good_trials));
-        t = mean(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),3)./se;
-        
-        [~, tind] = min(abs(D.time - 99*1e-3));
-        max_colour = interp1([min(abs(t(:,tind))), max(abs(t(:,tind)))], [0.9, 0], abs(t(:,tind)));
-        [~, plot_order] = sort(max_colour, 'descend');
-        max_colour = repmat(max_colour, 1, 3);
-    
-        % Plot t stat
-        figure; hold on; grid on; box on;
-        for chan = 1:size(t,1)
-            plot(1e3*D.time - delay, t(plot_order(chan),:), 'color', max_colour(plot_order(chan),:), 'LineWidth', 2);
-        end
-        a = tinv(1-0.025/(range(D.time)*40*length(plot_order)), size(D,3)-1);
-        l1 = plot([-100 400], [a a], 'b--', 'LineWidth', 2);
-        plot([-100 400], [-a -a], 'b--', 'LineWidth', 2);
-        % legend(l1, 'Sig. Threshold')
-        xlim([-100 400]);
-        if contains(meta_data{recording, "raw_data_name"}, 'seat') || contains(meta_data{recording, "raw_data_name"}, 'Seat')
-            ylim([-25 25]);
-        else
-            ylim([-1 1]*13);
-        end
-        xlabel('Time (ms)');
-        ylabel('t-stat');
-        set(gcf, 'Position', [680   654   451   344]);
-        set(gca, 'FontSize', 24);
-        fname = D.fname;
-        
-        if pp == 1
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'no_amm');
-        elseif pp == 2
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc');
-        elseif pp == 3
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'hfc_with_gradients');
-        elseif pp == 4
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm_spatial');
-        else
-            save_loc = fullfile(meta_data{recording, "results_save_loc"}, 'amm');
-        end
-        if ~exist(save_loc, 'dir')
-            mkdir(save_loc);
-        end
-
-        save_name = sprintf('%s_t_stat_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-    
-        % Plot topography of t-stat at 100 ms
-        lay_name = fullfile(meta_data{recording, "analysed_data_loc"}, ...
-            sprintf('%s_2Dlayout.mat', extractBefore(meta_data{recording, "raw_data_name"}, '_meg.lvm')));
-
-        if isfile(lay_name)
-            load(lay_name);
-        else
-            fid = fiducials(D);
-            fid_struct = struct('NAS', fid.fid.pnt(contains(fid.fid.label, 'nas'),:), ...
-                'LPA', fid.fid.pnt(contains(fid.fid.label, 'lpa'),:), ...
-                'RPA', fid.fid.pnt(contains(fid.fid.label, 'rpa'),:));
-            pos = D.sensors('MEG').coilpos;
-            lay = spm_get_anatomical_layout(D.sensors('MEG').coilpos(endsWith(D.sensors('MEG').label, ['-', rad_ax]),:), ...
-                D.sensors('MEG').label(endsWith(D.sensors('MEG').label, ['-', rad_ax])),...
-                double(gifti(D.inv{1}.mesh.tess_scalp).vertices), fid_struct, 0);
-            save(lay_name, 'lay');
-        end
-    
-        data = ftraw(D);
-        cfg = [];
-        cfg.channel = intersect(data.grad.label, D.chanlabels(indchantype(D, 'MEGMAG', 'GOOD')));
-        cfg.trials = good_trials;
-        avdata = ft_timelockanalysis(cfg, data);
-        tavdata = avdata;
-        tavdata.avg = t;
-    
-        figure;
-        cfg = [];
-        cfg.layout    = lay;
-        cfg.colorbar  = 'EastOutside';
-        cfg.colorbartext = 't-stat (100 ms)';
-        if contains(meta_data{recording, "raw_data_name"}, 'seat') || contains(meta_data{recording, "raw_data_name"}, 'Seat')
-            cfg.zlim      = [-15 15];
-        else
-            cfg.zlim = [-1 1]*8.83;
-        end
-        cfg.colormap  = colormap123;
-        cfg.xlim = [100, 100]*1e-3 + delay*1e-3;
-        cfg.comment = 'no';
-        cfg.figure = gca;
-        set(gca, 'FontSize', 24);
-        ft_topoplotER(cfg, tavdata)
-        set(gcf, 'Position', [994   704   404   274]);
-
-        save_name = sprintf('%s_t_stat_topography', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-    
-        % Plot average signal
-        figure; hold on; grid on; box on;
-        dat = mean(D(indchantype(D, 'MEGMAG', 'GOOD'),:,good_trials),3);
-        for chan = 1:size(t,1)
-            plot(1e3*D.time - delay, dat(plot_order(chan),:), 'color', max_colour(plot_order(chan),:), 'LineWidth', 2);
-        end
-        xlim([-100 400]);
-        ylim([-550 550]);
-        xlabel('Time (ms)');
-        ylabel('B (fT)');
-        grid on;
-        set(gcf, 'Position', [680   654   451   344]);
-        set(gca, 'FontSize', 24);
-        save_name = sprintf('%s_average_time_series', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-        
-        % Topoplot
-        figure;
-        cfg.figure = gca;
-        cfg.colorbartext = 'B (fT)';
-        cfg.zlim      = [-350, 350];
-        ft_topoplotER(cfg, avdata)
-        set(gcf, 'Position', [994   704   404   274]);
-        set(gca, 'FontSize', 24);
-
-        save_name = sprintf('%s_average_topography', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
-    end
-
-    close all
-end
 
 %% MMN
 
@@ -2080,7 +1904,8 @@ for recording = 1:length(recording_order)
     % Save figure
     save_loc = fullfile(meta_data{rec_idx, "results_save_loc"});
     save_name = 'MNN_sensor_pos';
-    print(fullfile(save_loc, save_name),'-dpng','-r300');
+    % print(fullfile(save_loc, save_name),'-dpng','-r300');
+    savefig(fullfile(save_loc, [save_name, '.fig']));
 end
 
 
@@ -2109,6 +1934,13 @@ for recording = 1:size(meta_data,1)
     % Take last tone of each set as standard
     standards = deviants(2:end)-1;
     standards = cat(1, standards, size(DD{pp},3));
+
+    % Take all standards
+    % standards = find(contains(stim.Condition, 'standard'));
+
+    % Restrict to sets of 6 or more
+    % deviants = deviants(trial_length >= 6);
+    % standards = deviants + 5;
 
     % Prep for dipole fit
     % Initialise at auditory cortices
@@ -2183,7 +2015,8 @@ for recording = 1:size(meta_data,1)
         set(gca, 'FontSize', 18);
         xlim([-100 400]);
         xlabel('Time (ms)');
-        ylim(t.Children, [-1 1]*13);
+        ylim(t.Children, [-1 1]*20);
+        % ylim(t.Children, [-1 1]*13);
         ylabel(t, 't-stat', 'FontSize', 18);
         lgd = legend('Standards', 'Deviants', 'MMN', 'location', 'eastoutside');
         set(gcf, 'Position', [626   476   821   285]);
@@ -2206,7 +2039,8 @@ for recording = 1:size(meta_data,1)
         end
 
         save_name = sprintf('%s_MMN_sensor_level', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
     
         % Plot topography of MMN at peak between 70 and 150 ms
         lay_name = fullfile(meta_data{recording, "analysed_data_loc"}, ...
@@ -2243,19 +2077,30 @@ for recording = 1:size(meta_data,1)
         cfg.highlightchannel = chan_to_plot_lay_idx;
         cfg.interactive = 'no';
         cfg.highlightsymbol = 'd';
-        cfg.highlightcolor = 'k';
+        cfg.highlightcolor = [132, 147, 36]./255;
         cfg.highlightsize = 10;
         cfg.markersymbol = 'o';
         cfg.figure = gca;
         set(gca, 'FontSize', 24);
-        ft_topoplotER(cfg, tavdata)
+        ft_topoplotER(cfg, tavdata); 
+        hold on;
+        plot(lay.pos(contains(lay.label, chan_to_plot_name),1), lay.pos(contains(lay.label, chan_to_plot_name),2),...
+            'marker', 'd', 'markeredgecolor', 'k', 'markersize', 10, 'linewidth', 3, 'markerfacecolor', [165, 204, 107]./255);
 
         set(gcf, 'Position', [994   704   404   274]);
         annotation('textbox', [0, 0, 0.6, 0.15], ...
             'string', sprintf('Peak latency: %.f ms', tested_time_period(peak_latency)*1e3 - delay), 'FontSize', 16, 'EdgeColor', 'None');
 
         save_name = sprintf('%s_MMN_topography', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
+
+    end
+    close all;
+end
+%% 
+for ii = 1:3
+    for test = 1:2
 
         % Dipole fit on average MMN
 
@@ -2304,7 +2149,8 @@ for recording = 1:size(meta_data,1)
         axis off
         view(0,90);
         save_name = sprintf('%s_MMN_ft_dip_fit_axial', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
 
         % Coronal
         figure; hold on;
@@ -2315,7 +2161,8 @@ for recording = 1:size(meta_data,1)
         axis tight
         axis off
         save_name = sprintf('%s_MMN_ft_dip_fit_coronal', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
         
 
         % Plot estimated source current
@@ -2404,7 +2251,8 @@ for recording = 1:size(meta_data,1)
             'string', sprintf('# deviants: %.f\n# standards: %.f', length(deviants), length(standards)), 'FontSize', 16, 'EdgeColor', 'None');
 
         save_name = sprintf('%s_dipfit_on_MMN_trace_dipole_all_sets', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
         
     end
 
@@ -2487,15 +2335,19 @@ for closed_loop = [true, false]
         
         if closed_loop
             if walking
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_walking'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_walking'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_walking.fig'));
             else
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_seated'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_seated'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_seated.fig'));
             end
         else
             if walking
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_walking'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_walking'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_walking.fig'));
             else
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_seated'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_seated'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_seated.fig'));
             end
         end
 
@@ -2545,15 +2397,19 @@ for closed_loop = [true, false]
 
         if closed_loop
             if walking
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_walking'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_walking'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_walking.fig'));
             else
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_seated'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_seated'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_seated.fig'));
             end
         else
             if walking
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_walking'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_walking'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_walking.fig'));
             else
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_seated'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_seated'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_seated.fig'));
             end
         end
 
@@ -2637,15 +2493,19 @@ for closed_loop = [true, false]
         
         if closed_loop
             if walking
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_walking_hfcgrad'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_walking_hfcgrad'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_walking_hfcgrad.fig'));
             else
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_seated_hfcgrad'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_seated_hfcgrad'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_closed_seated_hfcgrad.fig'));
             end
         else
             if walking
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_walking_hfcgrad'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_walking_hfcgrad'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_walking_hfcgrad.fig'));
             else
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_seated_hfcgrad'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_seated_hfcgrad'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'PSD_open_seated_hfcgrad.fig'));
             end
         end
 
@@ -2695,15 +2555,19 @@ for closed_loop = [true, false]
 
         if closed_loop
             if walking
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_walking_hfcgrad'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_walking_hfcgrad'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_walking_hfcgrad.fig'));
             else
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_seated_hfcgrad'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_seated_hfcgrad'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_closed_seated_hfcgrad.fig'));
             end
         else
             if walking
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_walking_hfcgrad'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_walking_hfcgrad'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_walking_hfcgrad.fig'));
             else
-                print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_seated_hfcgrad'),'-dpng','-r300');
+                % print(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_seated_hfcgrad'),'-dpng','-r300');
+                savefig(fullfile(extractBefore(meta_data{rec_idx,'results_save_loc'}, '\sub-'), 'ShieldingFactor_open_seated_hfcgrad.fig'));
             end
         end
 
@@ -2753,7 +2617,7 @@ for sub = 1:length(subIDs)
     label = extractBefore(label(endsWith(label, '-X'),:), '-');
 
     % Get which have the new cables
-    if strcmp(subIDs{sub}, 'sub-003') || strcmp(subIDs{sub}, 'sub-004')
+    if strcmp(subIDs{sub}, 'sub-001') || strcmp(subIDs{sub}, 'sub-002')
         new_cables = cellfun(@(x)strcmp(x(2), 'B'), label);
     else
         new_cables = ones(length(label),1);
@@ -2829,13 +2693,13 @@ for sub = 1:length(subIDs)
     set(gca, 'Visible', 'off');
 
     % Save
-    view(-90,0);
-    print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_left_view"),'-dpng','-r300');
-    view(0,0);
-    print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_back_view"),'-dpng','-r300');
-    view(90,0);
-    print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_right_view"),'-dpng','-r300');
-    view(180,0);
+    % view(-90,0);
+    % print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_left_view"),'-dpng','-r300');
+    % view(0,0);
+    % print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_back_view"),'-dpng','-r300');
+    % view(90,0);
+    % print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_right_view"),'-dpng','-r300');
+    % view(180,0);
 
     if strcmp(subIDs{sub}, 'sub-003')
         lgd = legend([lnew_wire, lbad_sens], 'Sensor with new wire', 'Bad channel', 'FontSize', 16);
@@ -2847,7 +2711,8 @@ for sub = 1:length(subIDs)
         set(lgd, 'Position', [0.,0.79,pos(3),pos(4)])
     end
     
-    print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_front_view"),'-dpng','-r300');
+    % print(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet_front_view"),'-dpng','-r300');
+    savefig(fullfile(meta_data{rec_inds(1), "results_save_loc"}, "helmet.fig"));
 end
     
 %% ROI analysis, dipole
@@ -2907,7 +2772,8 @@ for recording = 1:size(meta_data,1)
         end
 
         save_name = sprintf('%s_ROI_t_val_dipole', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
     end
 end
 
@@ -3051,13 +2917,15 @@ for recording = 1:size(meta_data,1)
         end
 
         save_name = sprintf('%s_min_norm_t_val_left', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
 
         view ([90 0])             % rotate the object in the view
         camlight('headlight')
 
         save_name = sprintf('%s_min_norm_t_val_right', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-        print(fullfile(save_loc, save_name),'-dpng','-r300');
+        % print(fullfile(save_loc, save_name),'-dpng','-r300');
+        savefig(fullfile(save_loc, [save_name, '.fig']));
     end
 end
 
@@ -3215,7 +3083,8 @@ for recording = 1:size(meta_data,1)
     set(gcf, 'color', 'w'); 
 
     save_name = sprintf('%s_trajectory', extractBefore(meta_data{recording, "raw_data_name"}, '.lvm'));
-    print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
+    % print(fullfile(meta_data{recording, "results_save_loc"}, save_name),'-dpng','-r300');
+    savefig(fullfile(meta_data{recording, "results_save_loc"}, [save_name, '.fig']));
 
     %% Plot as histograms
 
@@ -3272,7 +3141,8 @@ for recording = 1:size(meta_data,1)
         grid on;
         title(order_disp{ii}, 'FontSize', 20);
 
-        print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_displacement_%s', save_str, order_disp{ii})),'-dpng','-r300');
+        % print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_displacement_%s', save_str, order_disp{ii})),'-dpng','-r300');
+        savefig(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_displacement_%s.fig', save_str, order_disp{ii})));
     end
 
     for ii = 1:size(rotation, 2)
@@ -3286,7 +3156,8 @@ for recording = 1:size(meta_data,1)
         ax.RAxis.FontSize = 16;
         title(order_rot{ii});
         set(gcf, 'Position', [982   234   431   340]);
-        print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_rotation_%s', save_str, order_rot{ii})),'-dpng','-r300');
+        % print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_rotation_%s', save_str, order_rot{ii})),'-dpng','-r300');
+        savefig(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_rotation_%s.fig', save_str, order_rot{ii})));
     end
 
     figure;
@@ -3303,7 +3174,8 @@ for recording = 1:size(meta_data,1)
     ylabel('Frequency','FontSize',22);
     grid on;
     set(gcf, 'Position', [1128, 244, 832, 638]);
-    print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_mag_field_hist', save_str)),'-dpng','-r300');
+    % print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_mag_field_hist', save_str)),'-dpng','-r300');
+    savefig(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_mag_field_hist.fig', save_str)));
 
     % Area covered
     [~, area] = boundary(interp_cortex_center(opt_data_keep,[1,3]));
@@ -3354,7 +3226,8 @@ for recording = 1:size(meta_data,1)
         grid on;
         title(order_disp{ii}, 'FontSize', 20);
 
-        print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_speed_%s', save_str, order_disp{ii})),'-dpng','-r300');
+        % print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_speed_%s', save_str, order_disp{ii})),'-dpng','-r300');
+        savefig(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_speed_%s.fig', save_str, order_disp{ii})));
     end
 
     % Rate of change of magnetic field
@@ -3373,13 +3246,16 @@ for recording = 1:size(meta_data,1)
     ylabel('Frequency','FontSize',22);
     grid on;
     set(gcf, 'Position', [1128, 244, 832, 638]);
-    print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_mag_field_rate_of_change_hist', save_str)),'-dpng','-r300');
+    % print(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_mag_field_rate_of_change_hist', save_str)),'-dpng','-r300');
+    savefig(fullfile(meta_data{recording, "results_save_loc"}, sprintf('%s_mag_field_rate_of_change_hist.fig', save_str)))
+
+    close all;
 
 end
 
 %% Magnetic field histograms
 
-closed_loop = false; % Boolean - plot closed loop or open loop
+closed_loop = true; % Boolean - plot closed loop or open loop
 
 figure; 
 ax = subplot(1,1,1); hold on; grid on; box on;
@@ -3397,7 +3273,7 @@ else
         "sub-002_task-walkingOpen_run-002_meg.lvm", "sub-003_task-walkingOpen_meg.lvm"};
 end
 
-recording_order_name = {'1)', '2a)', '2b)', '3)'};
+recording_order_name = {'1)', '2.1)', '2.2)', '3)'};
 
 figure; 
 t = tiledlayout("vertical");
@@ -3459,9 +3335,11 @@ title(lgd, 'FWHM (nT)');
 
 figure(ax.Parent);
 if closed_loop
-    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_histogram'),'-dpng','-r300');
+    % print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_histogram'),'-dpng','-r300');
+    savefig(ax.Parent, fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_histogram.fig'));
 else
-    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_histogram_open_loop'),'-dpng','-r300');
+    % print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_histogram_open_loop'),'-dpng','-r300');
+    savefig(ax.Parent, fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_histogram_open_loop.fig'))
 end
 
 % Time Series
@@ -3474,10 +3352,13 @@ end
 ylabel(t, 'B (nT)', 'FontSize', 14);
 xlabel(t, 'Time (s)', 'FontSize', 14);
 figure(t.Parent);
+fig_handle = ancestor(t, 'figure');
 if closed_loop
-    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_time_series'),'-dpng','-r300');
+    % print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_time_series'),'-dpng','-r300');
+    savefig(fig_handle, fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_time_series.fig'), '-v7.3');
 else
-    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_time_series_open_loop'),'-dpng','-r300');
+    % print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_time_series_open_loop'),'-dpng','-r300');
+    savefig(fig_handle, fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_time_series_open_loop.fig'), '-v7.3');
 end
 
 
@@ -3500,7 +3381,7 @@ else
         "sub-002_task-walkingOpen_run-001_meg.lvm", ...
         "sub-002_task-walkingOpen_run-002_meg.lvm", "sub-003_task-walkingOpen_meg.lvm", };
 end
-recording_order_name = {'1)', '2a)', '2b)', '3)'};
+recording_order_name = {'1)', '2.1)', '2.2)', '3)'};
 
 for recording = 1:length(recording_order)
     
@@ -3542,7 +3423,9 @@ title(lgd, 'FWHM (nT/s)');
 
 figure(ax.Parent);
 if closed_loop
-    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_change_rate_histogram'),'-dpng','-r300');
+    % print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_change_rate_histogram'),'-dpng','-r300');
+    savefig(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_change_rate_histogram.fig'));
 else
-    print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_change_rate_histogram_open_loop'),'-dpng','-r300');
+    % print(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_change_rate_histogram_open_loop'),'-dpng','-r300');
+    savefig(fullfile(extractBefore(meta_data{rec_idx, 'results_save_loc'}, '\sub-'), 'Magnetic_field_change_rate_histogram_open_loop.fig'));
 end
